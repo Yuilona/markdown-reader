@@ -1,0 +1,67 @@
+/* Collapsible frontmatter widget shown above the article body.
+ * Visually subdued so it doesn't compete with the document title. */
+
+.details {
+  margin: 0 0 16px 0;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  background: #f8f8f8;
+  font-size: 13px;
+  color: #5a5a5a;
+}
+
+.summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  user-select: none;
+  outline: none;
+  border-radius: 6px;
+}
+
+.summary::-webkit-details-marker {
+  display: none;
+}
+
+.summary:hover {
+  background: #f0f0f0;
+}
+
+.summary:focus-visible {
+  outline: 2px solid #0078d4;
+  outline-offset: -2px;
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  color: #6a6a6a;
+}
+
+.label {
+  font-weight: 500;
+}
+
+.body {
+  margin: 0;
+  padding: 12px 14px;
+  border-top: 1px solid #e5e5e5;
+  background: #ffffff;
+  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #1f1f1f;
+  overflow-x: auto;
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+}
+
+.body code {
+  font-family: inherit;
+  background: none;
+  padding: 0;
+  white-space: pre;
+}

@@ -1,16 +1,21 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for the main window. Grants the core defaults (event listen/unlisten, read-only window queries) plus the explicit window-write commands used by the custom Win11 titlebar (minimize / toggle-maximize / close) and the unminimize/show/set-focus needed by the single-instance Rust handler. Also grants dialog:open for Ctrl+O.",
+  "description": "Default capability for the main window. Grants the core defaults (event listen/unlisten, read-only window queries) plus the explicit window-write commands used by the custom Win11 titlebar (minimize / toggle-maximize / close) and the unminimize/show/set-focus needed by the single-instance Rust handler. Also grants dialog:open for Ctrl+O and fs:read-text-file for loading the selected markdown file (PR-2). Filesystem scope is intentionally unrestricted in v0.1: the user explicitly chooses every file they open.",
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:window:allow-start-dragging",
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",
     "core:window:allow-show",
     "core:window:allow-set-focus",
     "core:window:allow-unminimize",
-    "dialog:allow-open"
+    "dialog:allow-open",
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [{ "path": "**" }]
+    }
   ]
 }

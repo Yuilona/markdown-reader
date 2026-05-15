@@ -1,0 +1,81 @@
+/* Fenced code block wrapper.
+ * - `position: relative` anchors the floating toolbar.
+ * - The Shiki <pre> keeps its own background; we just add overflow rules
+ *   and a subtle border to match GitHub's look. */
+
+.wrapper {
+  position: relative;
+  margin: 16px 0;
+}
+
+.pre {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  /* Shiki injects a background-color via inline style — keep it. */
+}
+
+.pre code {
+  font-family: inherit;
+  /* Shiki spans handle color; reset GitHub-CSS code defaults that
+     would otherwise add a tinted background to `<code>` inside `<pre>`. */
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+.toolbar {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  /* Sit above the scrollable code; pointer-events default through label. */
+  z-index: 1;
+}
+
+.lang {
+  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  color: #6a737d;
+  text-transform: lowercase;
+  user-select: none;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.copyBtn {
+  font-family: inherit;
+  font-size: 11px;
+  color: #1f1f1f;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid #d1d5da;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+  user-select: none;
+}
+
+.wrapper:hover .copyBtn {
+  opacity: 1;
+}
+
+.copyBtn:hover {
+  background: #ffffff;
+  border-color: #b8b8b8;
+}
+
+.copyBtn:focus-visible {
+  outline: 2px solid #0078d4;
+  outline-offset: 1px;
+  opacity: 1;
+}

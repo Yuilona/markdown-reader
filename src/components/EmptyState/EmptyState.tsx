@@ -1,8 +1,13 @@
 import { useState } from 'react';
-import { openFileDialog } from '../../lib/tauri';
+import { openFileDialog, type LoadedDocument } from '../../lib/tauri';
 import styles from './EmptyState.module.css';
 
-export function EmptyState() {
+interface EmptyStateProps {
+  /** Called with the loaded document when the user picks a file. */
+  onOpen: (doc: LoadedDocument) => void;
+}
+
+export function EmptyState({ onOpen }: EmptyStateProps) {
   const [isDragOver, setIsDragOver] = useState(false);
 
   // PR-1: visual-only drag-over feedback. Real drop handling is wired in PR-5.
@@ -17,8 +22,9 @@ export function EmptyState() {
     // Real drop handling deferred to PR-5.
   };
 
-  const handleOpen = () => {
-    void openFileDialog();
+  const handleOpen = async () => {
+    const doc = await openFileDialog();
+    if (doc) onOpen(doc);
   };
 
   return (

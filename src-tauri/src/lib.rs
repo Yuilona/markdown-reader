@@ -25,6 +25,7 @@ pub fn run() {
             let _ = app.emit("second-instance", args);
         }))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .setup(|_app| {
             // Force creation of the data dir on first launch.
             let _ = data_dir::data_dir();

@@ -1,0 +1,37 @@
+/* Document layout frame.
+ * - .scrollArea owns vertical scrolling so the article column itself
+ *   doesn't have to manage overflow.
+ * - .article applies the 820px max-width / centered layout (R9.4) and
+ *   inherits typography from `github-markdown-css`'s `.markdown-body`. */
+
+.scrollArea {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  background: #ffffff;
+}
+
+.article {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 32px 64px;
+  /* github-markdown-css sets its own background-color: #ffffff and
+   *  color: #1f2328 inside .markdown-body — leave those untouched. */
+  box-sizing: border-box;
+}
+
+/* Narrower viewport: shrink horizontal padding so the body stays
+ *  comfortably readable instead of producing a thin column. */
+@media (max-width: 720px) {
+  .article {
+    padding: 24px 16px;
+  }
+}
+
+/* github-markdown-css styles `.markdown-body table` etc.; we just need
+ *  to make sure long tables can scroll horizontally inside our column. */
+.article :global(table) {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
