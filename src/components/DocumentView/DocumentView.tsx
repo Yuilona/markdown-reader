@@ -1,13 +1,16 @@
 import { useMemo } from 'react';
 import Markdown from 'react-markdown';
 import type { Components } from 'react-markdown';
+import type { PluggableList } from 'unified';
 
 import { remarkPlugins, rehypePlugins } from '../../lib/markdownPlugins';
+import { rehypeMermaidPretag } from '../../lib/rehypeMermaidPretag';
 import { splitFrontmatter } from '../../lib/parseFrontmatter';
 import type { LoadedDocument } from '../../lib/tauri';
 
 import { CodeBlock } from './CodeBlock';
 import { Frontmatter } from './Frontmatter';
+import { Mermaid } from '../Mermaid/Mermaid';
 import styles from './DocumentView.module.css';
 
 // Vendor CSS pulled directly from node_modules — no copy in src/styles
@@ -47,6 +50,22 @@ interface DocumentViewProps {
  * tinted text without re-implementing the icon list. No `Admonition.tsx`
  * is needed; the CSS-only route is the cleanest fit here.
  */
+/**
+ * Rehype plugin chain assembled with our Mermaid pre-tagger PREPENDED.
+ *
+ * `rehypeMermaidPretag` MUST run before Shiki (which lives in
+ * `markdownPlugins.ts`'s `rehypePlugins`). Shiki rewrites code blocks
+ * whose language is unknown into a tokenized fragment that loses the
+ * original `language-mermaid` class — by the time the React layer sees
+ * the tree, the "this is mermaid" signal is gone. Pre-tagging stashes
+ * the source on the `<pre>` so the override can route to `<Mermaid>`.
+ *
+ * Declared at module scope so the array identity is stable across
+ * re-renders (avoids re-running the markdown pipeline because
+ * `rehypePlugins` "changed").
+ */
+const rehypePluginsWithMermaid: PluggableList = [rehypeMermaidPretag, ...rehypePlugins];
+
 export function DocumentView({ doc }: DocumentViewProps) {
   const { frontmatterRaw, body } = useMemo(() => {
     const split = splitFrontmatter(doc.text);
@@ -60,7 +79,7 @@ export function DocumentView({ doc }: DocumentViewProps) {
         <Frontmatter raw={frontmatterRaw} />
         <Markdown
           remarkPlugins={remarkPlugins}
-          rehypePlugins={rehypePlugins}
+          rehypePlugins={rehypePluginsWithMermaid}
           components={components}
         >
           {body}
@@ -76,7 +95,30 @@ export function DocumentView({ doc }: DocumentViewProps) {
  * markdown pipeline because the components prop "changed").
  */
 const components: Components = {
-  pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
+  pre: ({ children, node }) => {
+    // PR-3: mermaid blocks are pre-tagged by `rehypeMermaidPretag` with
+    // a `data-mermaid-source` attribute carrying the raw source. When
+    // present, route to `<Mermaid>` instead of `<CodeBlock>`.
+    // react-markdown is configured (via hast-util-to-jsx-runtime's
+    // `passNode: true`) to forward the raw hast node, so the property
+    // appears under the same key we wrote — kebab `data-mermaid-source`.
+    // The camelCase `dataMermaidSource` branch is a defensive fallback
+    // in case a future rehype plugin in the chain normalizes property
+    // names.
+    const props = node?.properties as
+      | { dataMermaidSource?: unknown; ['data-mermaid-source']?: unknown }
+      | undefined;
+    const mermaidSource =
+      typeof props?.['data-mermaid-source'] === 'string'
+        ? props['data-mermaid-source']
+        : typeof props?.dataMermaidSource === 'string'
+          ? props.dataMermaidSource
+          : null;
+    if (mermaidSource !== null) {
+      return <Mermaid source={mermaidSource} />;
+    }
+    return <CodeBlock>{children}</CodeBlock>;
+  },
   input: ({ ...props }) => {
     // GFM task list items render as <input type="checkbox">. Force them
     // disabled so users cannot toggle (R3.9 — this is a reader, not an

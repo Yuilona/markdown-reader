@@ -1,0 +1,172 @@
+/* Mermaid block container.
+ * - `position: relative` anchors the toolbar in the top-right.
+ * - `min-height` prevents the SVG from collapsing to 0 height once
+ *   svg-pan-zoom takes over the viewBox math (it removes the SVG's
+ *   intrinsic size, so without a floor here the block can briefly
+ *   become invisible during the swap).
+ * - We also scope hover-driven toolbar visibility to this container. */
+
+.container {
+  position: relative;
+  margin: 16px 0;
+  padding: 8px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #ffffff;
+  min-height: 200px;
+  box-sizing: border-box;
+  /* Render isolation so a deep zoom doesn't bleed shadows etc. into
+     the surrounding markdown body. */
+  overflow: hidden;
+}
+
+/* The wrapper Mermaid's SVG lives in. Sized by the SVG itself once
+   svg-pan-zoom attaches; we just keep the layout flow predictable. */
+.svgHost {
+  width: 100%;
+  display: block;
+}
+
+.svgHost svg {
+  display: block;
+  /* Mermaid sets its own width/height which we strip in JS; this
+     selector is the safety net for the moment between mount and
+     svg-pan-zoom attaching. */
+  max-width: 100%;
+  height: auto;
+}
+
+/* ---- Floating toolbar (R4.2). Hidden by default, fades in on hover. */
+
+.toolbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  z-index: 2;
+}
+
+.container:hover .toolbar,
+.toolbar:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.toolbarBtn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #1f2328;
+  cursor: pointer;
+  padding: 0;
+  user-select: none;
+}
+
+.toolbarBtn:hover {
+  background: #f3f4f6;
+  border-color: #d0d7de;
+}
+
+.toolbarBtn:active {
+  background: #e6e8eb;
+}
+
+.toolbarBtn:focus-visible {
+  outline: 2px solid #0078d4;
+  outline-offset: 1px;
+}
+
+/* ---- Loading skeleton (R4.1). A subtle shimmer-bar standing in for
+   the diagram while mermaid's chunk loads + first render runs. */
+
+.skeleton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.skeletonBar {
+  width: 60%;
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    #eef0f3 0%,
+    #f6f8fa 50%,
+    #eef0f3 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+/* ---- Per-block error fallback (R4.5). Red-bordered placeholder. */
+
+.error {
+  border-color: #cf222e;
+  background: #ffebe9;
+  min-height: 0;
+}
+
+.errorTitle {
+  font-weight: 600;
+  color: #82071e;
+  margin-bottom: 4px;
+}
+
+.errorMessage {
+  margin: 0 0 8px 0;
+  padding: 8px;
+  background: #ffffff;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  color: #82071e;
+}
+
+.error details {
+  font-size: 12px;
+  color: #57606a;
+}
+
+.error summary {
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 0;
+}
+
+.errorSource {
+  margin: 4px 0 0 0;
+  padding: 8px;
+  background: #ffffff;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  color: #1f2328;
+}

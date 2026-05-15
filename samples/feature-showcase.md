@@ -251,4 +251,112 @@ Above this paragraph there will be a horizontal rule.
 
 ---
 
+## Mermaid Diagrams
+
+Hover any diagram to reveal the floating toolbar (top-right). Inside a
+diagram: **drag** to pan, **Ctrl + wheel** to zoom (plain wheel scrolls
+the page past the block), **double-click** to reset to fit-to-width.
+The Fullscreen button is a no-op for now — PR-4 wires the lightbox; for
+PR-3 it just logs `fullscreen requested` to the DevTools console.
+
+### Flowchart
+
+```mermaid
+graph TD
+    Start([User opens .md]) --> Parse[react-markdown pipeline]
+    Parse --> Plain{Block type?}
+    Plain -->|Mermaid| Lazy[Lazy-load mermaid chunk]
+    Plain -->|Code| Shiki[Shiki highlight]
+    Plain -->|Text| Render[Render normally]
+    Lazy --> Cache{In cache?}
+    Cache -->|Yes| Mount[Mount cached SVG]
+    Cache -->|No| RenderSvg[mermaid.render]
+    RenderSvg --> Mount
+    Mount --> Pan[Attach svg-pan-zoom]
+    Pan --> Done([Interactive diagram ready])
+    Shiki --> Done
+    Render --> Done
+```
+
+### Sequence diagram
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant W as WebView
+    participant T as Tauri Core
+    participant FS as Filesystem
+
+    U->>W: Ctrl+O
+    W->>T: invoke('open_dialog')
+    T->>FS: native open dialog
+    FS-->>T: chosen path
+    T-->>W: { path }
+    loop until success or cancel
+        W->>T: invoke('read_text_file')
+        T->>FS: read UTF-8
+        FS-->>T: bytes
+        T-->>W: text content
+    end
+    W-->>U: render markdown
+```
+
+### State diagram
+
+```mermaid
+stateDiagram-v2
+    [*] --> Empty
+    Empty --> Loading: open file
+    Loading --> Rendered: parse OK
+    Loading --> Error: parse fail
+    Rendered --> Loading: open another
+    Error --> Empty: dismiss
+    Rendered --> Empty: Ctrl+W
+    Empty --> [*]: Ctrl+Q
+```
+
+### Class diagram
+
+```mermaid
+classDiagram
+    class DocumentView {
+        +doc: LoadedDocument
+        +render() ReactNode
+    }
+    class Mermaid {
+        -source: string
+        -panZoom: SvgPanZoom
+        +zoomIn()
+        +zoomOut()
+        +reset()
+    }
+    class MermaidToolbar {
+        +onZoomIn()
+        +onZoomOut()
+        +onReset()
+        +onFullscreen()
+    }
+    class CodeBlock {
+        -copied: boolean
+        +handleCopy()
+    }
+    DocumentView --> Mermaid : routes language-mermaid
+    DocumentView --> CodeBlock : routes other languages
+    Mermaid --> MermaidToolbar : renders on hover
+```
+
+### Intentionally broken diagram (per-block error fallback)
+
+The block below has an incomplete arrow on purpose. It MUST render as a
+red-bordered error placeholder, and the four diagrams above MUST keep
+rendering normally — verifying R4.5 (per-block try/catch).
+
+```mermaid
+graph TD
+  A --> B
+  C ---
+```
+
+---
+
 End of showcase.
