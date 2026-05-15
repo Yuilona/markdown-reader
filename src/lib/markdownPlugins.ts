@@ -6,70 +6,52 @@ import rehypeKatex from 'rehype-katex';
 import rehypeShikiFromHighlighter from '@shikijs/rehype/core';
 import { createHighlighterCore } from 'shiki/core';
 import { createOnigurumaEngine } from 'shiki/engine/oniguruma';
-import type { LanguageInput, ThemeInput } from 'shiki/core';
 import type { PluggableList } from 'unified';
 
 /**
  * Plugin chain for `react-markdown` (PR-2 scope).
  *
- * Languages are pre-loaded eagerly so the rehype-shiki transform stays
- * synchronous (lets us use the sync `<Markdown>` component instead of
- * `<MarkdownAsync>` / `<MarkdownHooks>`). Cold-start cost is small —
- * Shiki's WASM oniguruma + ~16 grammars ~~ a few hundred KB total.
+ * Shiki themes/langs are loaded via STATIC `import()` calls — Vite can
+ * statically analyze each literal path and pre-bundle the module. Do NOT
+ * refactor back to a template-literal loop (`import(`@shikijs/langs/${name}`)`):
+ * Vite cannot analyze that pattern, the dynamic-resolution fallback fails
+ * inside Tauri's webview at runtime, the top-level await throws, the
+ * module fails to load, and the entire app blank-screens.
+ *
+ * Shiki's `createHighlighterCore` accepts Promise<ThemeInput> /
+ * Promise<LanguageInput> directly, so we just pass each `import()` result
+ * without `.then(m => m.default)` or `await` indirection.
  *
  * Both light AND dark themes are loaded so PR-6 can flip via CSS
  * variables without re-creating the highlighter. Until PR-6 ships an
  * actual theme switcher, `defaultColor: 'light'` makes the rendered
  * spans use the light palette directly.
  */
-
-/** Languages bundled by default. PR-2 covers the common doc set; an
- * extra-language plugin can be added later when needed. */
-const SHIKI_LANGS = [
-  'js',
-  'ts',
-  'jsx',
-  'tsx',
-  'json',
-  'yaml',
-  'bash',
-  'python',
-  'rust',
-  'go',
-  'html',
-  'css',
-  'md',
-  'sql',
-  'diff',
-  'toml',
-] as const;
-
-const SHIKI_THEMES = ['github-light', 'github-dark'] as const;
-
-/**
- * Build the Shiki highlighter once on module load. The result is a
- * Promise that resolves to a configured highlighter; the plugin chain
- * factory awaits it so callers get a ready-to-use array.
- */
-const highlighterPromise = createHighlighterCore({
-  // Each `@shikijs/themes/<name>` / `@shikijs/langs/<name>` module
-  // default-exports a registration object that satisfies Shiki's
-  // `ThemeInput` / `LanguageInput`. Type the dynamic-import callbacks
-  // explicitly so we don't need an `as any` escape hatch.
-  themes: await Promise.all(
-    SHIKI_THEMES.map((name) =>
-      import(`@shikijs/themes/${name}`).then((m: { default: ThemeInput }) => m.default),
-    ),
-  ),
-  langs: await Promise.all(
-    SHIKI_LANGS.map((name) =>
-      import(`@shikijs/langs/${name}`).then((m: { default: LanguageInput }) => m.default),
-    ),
-  ),
+const highlighter = await createHighlighterCore({
+  themes: [
+    import('@shikijs/themes/github-light'),
+    import('@shikijs/themes/github-dark'),
+  ],
+  langs: [
+    import('@shikijs/langs/javascript'),
+    import('@shikijs/langs/typescript'),
+    import('@shikijs/langs/jsx'),
+    import('@shikijs/langs/tsx'),
+    import('@shikijs/langs/json'),
+    import('@shikijs/langs/yaml'),
+    import('@shikijs/langs/bash'),
+    import('@shikijs/langs/python'),
+    import('@shikijs/langs/rust'),
+    import('@shikijs/langs/go'),
+    import('@shikijs/langs/html'),
+    import('@shikijs/langs/css'),
+    import('@shikijs/langs/markdown'),
+    import('@shikijs/langs/sql'),
+    import('@shikijs/langs/diff'),
+    import('@shikijs/langs/toml'),
+  ],
   engine: createOnigurumaEngine(import('shiki/wasm')),
 });
-
-const highlighter = await highlighterPromise;
 
 /** Remark plugins (run on the mdast). The YAML frontmatter is stripped
  * BEFORE this pipeline runs, by `splitFrontmatter` in `parseFrontmatter.ts`
