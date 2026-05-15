@@ -45,3 +45,7 @@ coverage/
 # --- Misc ---
 *.tsbuildinfo
 .eslintcache
+
+# --- TS project-references emit (composite mode in tsconfig.node.json) ---
+vite.config.js
+vite.config.d.ts
