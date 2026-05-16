@@ -62,14 +62,13 @@
 }
 
 .svgWrapper > svg {
+  /* Dimensions are set explicitly in JS (Lightbox.tsx) based on the
+   * SVG's viewBox + viewport size — Mermaid emits no width/height
+   * attributes, so a CSS-`auto` SVG would collapse to its 300×150
+   * default and lay out unexpectedly inside an auto-sized absolute
+   * wrapper. The JS path also overrides Mermaid's inline
+   * `max-width` style. Display:block kept defensively. */
   display: block;
-  /* Mermaid's SVG often carries inline width/height attributes — let CSS
-   * win so the diagram scales to fit a reasonable card without
-   * exceeding the viewport. */
-  width: auto;
-  height: auto;
-  max-width: calc(95vw - 48px);
-  max-height: calc(95vh - 48px);
 }
 
 /* Image (raster lightbox). Same absolute-positioning rule so panzoom's

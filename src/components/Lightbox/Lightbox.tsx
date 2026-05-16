@@ -75,6 +75,44 @@ export function Lightbox({ content, onClose }: LightboxProps) {
 
     let disposed = false;
 
+    // For Mermaid SVGs: explicitly size the inner SVG element so the
+    // auto-sized absolute wrapper can lay out around it. Mermaid emits
+    // SVG with only `viewBox` + inline `style="max-width"` — no width/
+    // height attributes. Without explicit dimensions a CSS-`auto` SVG
+    // collapses to its default 300×150 (which then sits at unexpected
+    // positions because the absolute wrapper has no width to anchor
+    // against). We compute a viewport-fit size that preserves the
+    // viewBox aspect ratio, capped at 90vw / 90vh minus the wrapper's
+    // padding, with a sensible upscale floor for tiny diagrams.
+    const svgEl = container.querySelector<SVGSVGElement>('svg');
+    if (svgEl) {
+      const vb = svgEl.viewBox?.baseVal;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const wrapperPadding = 48; // matches CSS .svgWrapper padding * 2
+      const maxW = vw * 0.9 - wrapperPadding;
+      const maxH = vh * 0.9 - wrapperPadding;
+      let w = maxW;
+      let h = maxH;
+      if (vb && vb.width > 0 && vb.height > 0) {
+        const aspect = vb.width / vb.height;
+        // Aspect-fit into the (maxW × maxH) box.
+        if (maxW / aspect <= maxH) {
+          w = maxW;
+          h = maxW / aspect;
+        } else {
+          h = maxH;
+          w = maxH * aspect;
+        }
+      }
+      svgEl.removeAttribute('width');
+      svgEl.removeAttribute('height');
+      svgEl.style.width = `${w}px`;
+      svgEl.style.height = `${h}px`;
+      svgEl.style.maxWidth = 'none'; // override Mermaid's inline max-width
+      svgEl.style.display = 'block';
+    }
+
     // Lazy import — keeps the library off the initial bundle. panzoom is
     // ~30 KB so the impact is small either way, but lazy-loading is
     // consistent with the Mermaid + svg-pan-zoom pattern in PR-3.
