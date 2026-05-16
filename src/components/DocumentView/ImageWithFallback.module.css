@@ -5,18 +5,20 @@
  * their own line, and breaking flow with a block-level placeholder
  * would jump the page around when the image fails after layout.
  *
- * Color palette is intentionally light-mode-only for PR-5b; PR-6's
- * theme system will add a CSS-variable equivalent for dark mode. */
+ * PR-6: palette migrated to CSS variables (was hard-coded #f6f8fa /
+ * #d0d7de / #57606a from the GitHub light theme — flagged by the
+ * PR-5b check note). Dark-theme values are defined in theme.dark.css.
+ */
 
 .placeholder {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: #f6f8fa;
-  border: 1px dashed #d0d7de;
+  background: var(--bg-img-placeholder);
+  border: 1px dashed var(--border-img-placeholder);
   border-radius: 6px;
-  color: #57606a;
+  color: var(--fg-img-placeholder);
   font-size: 13px;
   font-family: inherit;
   max-width: 100%;

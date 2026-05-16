@@ -10,7 +10,7 @@ import { createOnigurumaEngine } from 'shiki/engine/oniguruma';
 import type { PluggableList } from 'unified';
 
 /**
- * Plugin chain for `react-markdown` (PR-2 scope).
+ * Plugin chain for `react-markdown` (PR-2 scope + PR-6 dual-theme).
  *
  * Shiki themes/langs are loaded via STATIC `import()` calls — Vite can
  * statically analyze each literal path and pre-bundle the module. Do NOT
@@ -23,10 +23,13 @@ import type { PluggableList } from 'unified';
  * Promise<LanguageInput> directly, so we just pass each `import()` result
  * without `.then(m => m.default)` or `await` indirection.
  *
- * Both light AND dark themes are loaded so PR-6 can flip via CSS
- * variables without re-creating the highlighter. Until PR-6 ships an
- * actual theme switcher, `defaultColor: 'light'` makes the rendered
- * spans use the light palette directly.
+ * PR-6 dual-theme: with `defaultColor: false`, Shiki emits BOTH the
+ * light AND dark color variants as CSS variables (`--shiki-light` /
+ * `--shiki-light-bg` AND `--shiki-dark` / `--shiki-dark-bg`) on each
+ * token + the `<pre>`. The light side paints by default via inline
+ * styles; `theme.dark.css` adds a `[data-theme='dark'] .shiki span`
+ * override that swaps to the dark variant. Result: instant palette
+ * flip on theme toggle with NO re-render of the markdown pipeline.
  */
 const highlighter = await createHighlighterCore({
   themes: [
@@ -94,9 +97,13 @@ export const rehypePlugins: PluggableList = [
     highlighter,
     {
       themes: { light: 'github-light', dark: 'github-dark' },
-      // Show readable colors in PR-2; PR-6 will hook real CSS variables
-      // so switching the app theme flips both palettes live.
-      defaultColor: 'light',
+      // PR-6 dual-theme: emit BOTH palettes as CSS variables and let
+      // `theme.dark.css` flip which one paints. The light variant's
+      // values become the inline default via the first theme key,
+      // but the rule set in theme.light.css / theme.dark.css makes
+      // the switch explicit (and survives both user-forced modes and
+      // OS preference changes).
+      defaultColor: false,
       // Add `language-xxx` class so our CodeBlock wrapper can read the
       // language name without parsing markdown meta strings.
       addLanguageClass: true,

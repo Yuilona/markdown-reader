@@ -3,6 +3,7 @@ import { Titlebar } from './components/Titlebar/Titlebar';
 import { EmptyState } from './components/EmptyState/EmptyState';
 import { DocumentView } from './components/DocumentView/DocumentView';
 import { LightboxProvider } from './components/Lightbox/LightboxContext';
+import { ThemeProvider } from './components/ThemeProvider/ThemeProvider';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useDragDrop } from './hooks/useDragDrop';
 import { useFileWatcher } from './hooks/useFileWatcher';
@@ -12,12 +13,35 @@ import {
 } from './lib/singleInstance';
 import { loadDocument, type LoadedDocument } from './lib/tauri';
 import { cleanupStaleTemp } from './lib/recentFiles';
+import { loadUserCss } from './lib/userCss';
 import { LinkRouterContext, type LinkRouterContextValue } from './lib/linkRouter';
 
 const DROP_ERROR_MS = 3000;
 const DROP_ERROR_TEXT = '无法打开：仅支持 .md / .markdown 文件';
 
+/**
+ * PR-6: outer App is a thin wrapper that mounts <ThemeProvider> so every
+ * descendant (including Titlebar's theme toggle and useShortcuts's
+ * Ctrl+T handler) can call useTheme(). The actual app body lives in
+ * <AppContent> to keep the provider boundary clean.
+ *
+ * We also fire `loadUserCss()` here (not inside AppContent) so the
+ * read-once user.css inject runs exactly once for the app lifetime,
+ * regardless of any future remount of the body.
+ */
 export default function App() {
+  useEffect(() => {
+    void loadUserCss();
+  }, []);
+
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
+  );
+}
+
+function AppContent() {
   // PR-2: a single in-memory document. Multi-file/tabs is explicitly
   // out of scope (and probably forever) per PRD §"Out of Scope".
   const [doc, setDoc] = useState<LoadedDocument | null>(null);

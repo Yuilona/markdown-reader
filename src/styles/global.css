@@ -1,4 +1,8 @@
-/* CSS reset + base layout for the frameless app shell. */
+/* CSS reset + base layout for the frameless app shell.
+ *
+ * PR-6: hard-coded colors / font stacks moved to CSS variables defined
+ * in theme.light.css / theme.dark.css / fonts.css.
+ */
 
 *,
 *::before,
@@ -17,12 +21,11 @@ body,
 }
 
 body {
-  font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei", "PingFang SC",
-    -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-family: var(--font-stack-body);
   font-size: 14px;
   line-height: 1.5;
-  color: #1f1f1f;
-  background-color: #fafafa;
+  color: var(--fg-default);
+  background-color: var(--bg-app);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -36,14 +39,14 @@ button {
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background-color: #fafafa;
+  background-color: var(--bg-app);
 }
 
 .app-main {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  background-color: #ffffff;
+  background-color: var(--bg-canvas);
   position: relative; /* anchor for the drop-error banner */
 }
 
@@ -53,6 +56,10 @@ button {
  * handles the fade in/out so the banner doesn't pop.
  *
  * PR-8 will replace this with a real toast system (R12.5 / R12.8).
+ *
+ * PR-6: solid red background uses --bg-error which keeps roughly the
+ * same hue across light/dark (semantic "danger" color). The text is
+ * always white because the bg is high-contrast.
  */
 .dropErrorBanner {
   position: absolute;
@@ -63,7 +70,7 @@ button {
   padding: 8px 16px;
   font-size: 13px;
   color: #ffffff;
-  background: #d13438;
+  background: var(--bg-error);
   border-radius: 6px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
   pointer-events: none;

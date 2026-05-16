@@ -21,7 +21,17 @@ import styles from './DocumentView.module.css';
 
 // Vendor CSS pulled directly from node_modules — no copy in src/styles
 // per the PR-2 brief. Vite resolves these at bundle time.
-import 'github-markdown-css/github-markdown-light.css';
+//
+// PR-6: switched from `github-markdown-light.css` to the COMBINED
+// `github-markdown.css`. The combined file ships `[data-theme='light']`
+// and `[data-theme='dark']` selectors AND a fallback
+// `@media (prefers-color-scheme: dark)` rule. Because ThemeProvider sets
+// `data-theme` on <html>, the explicit-mode selectors win over the
+// media query — so user-forced light mode works even on a dark-OS
+// machine, and user-forced dark works on a light-OS machine. Our
+// `theme.light.css` / `theme.dark.css` then override its variables
+// with our palette tokens for color cohesion.
+import 'github-markdown-css/github-markdown.css';
 import 'katex/dist/katex.min.css';
 import 'remark-github-blockquote-alert/alert.css';
 

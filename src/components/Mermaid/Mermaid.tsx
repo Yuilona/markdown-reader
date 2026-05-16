@@ -1,15 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
-import { loadMermaid } from '../../lib/mermaidLazy';
+import { loadMermaid, setMermaidTheme } from '../../lib/mermaidLazy';
 import { getCached, putCached } from '../../lib/mermaidCache';
+import { useTheme } from '../ThemeProvider/useTheme';
 import { MermaidToolbar } from './MermaidToolbar';
 import styles from './Mermaid.module.css';
 
 /**
- * The mermaid theme name we render against. Hard-coded to 'default' for
- * PR-3 — PR-6 will replace this with a value from a theme context and
- * call `clearCacheForTheme('default')` (etc.) when the user toggles.
+ * PR-6: the mermaid theme name comes from the live theme context now.
+ * `effective` is 'light' | 'dark'; map to Mermaid's palette keys
+ * ('default' is the GitHub-light-equivalent, 'dark' is the dark one).
+ *
+ * The cache key includes this string (see `mermaidCache.ts`), so a
+ * theme toggle finds no cache hit under the new key → mermaid.render()
+ * runs and produces a fresh SVG in the new palette. The previous
+ * theme's cache slice is cleared inside `setMermaidTheme()` (called
+ * from ThemeProvider), so re-mounting an unchanged source under the
+ * old theme would also miss its cache and re-render. Net effect:
+ * theme toggle invalidates every visible Mermaid diagram correctly
+ * without React having to do a key-driven remount dance at the
+ * DocumentView level.
  */
-const MERMAID_THEME = 'default';
+function toMermaidThemeName(effective: 'light' | 'dark'): 'default' | 'dark' {
+  return effective === 'dark' ? 'dark' : 'default';
+}
 
 interface MermaidProps {
   /** Raw Mermaid source (the contents of the ```mermaid fence). */
@@ -58,10 +71,17 @@ type RenderState =
  *   same treatment.
  */
 export function Mermaid({ source, onRequestFullscreen }: MermaidProps) {
+  // PR-6: subscribe to the app theme so the cache key + future re-renders
+  // pick up the active palette. Reading at the top of render keeps the
+  // value stable for THIS render pass; the cache-key dependency in the
+  // effect below picks up theme changes between renders.
+  const { effective } = useTheme();
+  const mermaidTheme = toMermaidThemeName(effective);
+
   const [state, setState] = useState<RenderState>(() => {
     // Check cache synchronously — this lets a remount of an already-
     // rendered diagram (e.g. after a re-parse) skip the loading flash.
-    const cached = getCached(source, MERMAID_THEME);
+    const cached = getCached(source, mermaidTheme);
     return cached ? { kind: 'rendered', svg: cached } : { kind: 'loading' };
   });
 
@@ -76,12 +96,15 @@ export function Mermaid({ source, onRequestFullscreen }: MermaidProps) {
   const customCleanupRef = useRef<(() => void) | null>(null);
 
   // ---- Step 1 + 2: render Mermaid SVG (cache → load → render → cache).
+  // PR-6: depends on `mermaidTheme` too so theme toggles trigger a re-
+  // render. The cache key includes theme, so toggling palette finds no
+  // hit under the new key and produces a fresh SVG in matching colors.
   useEffect(() => {
     let cancelled = false;
 
-    // Re-check cache: if the `source` prop changed after mount, this is
-    // the path that catches a hit and skips the async dance.
-    const cached = getCached(source, MERMAID_THEME);
+    // Re-check cache: if the `source` prop or theme changed after mount,
+    // this is the path that catches a hit and skips the async dance.
+    const cached = getCached(source, mermaidTheme);
     if (cached) {
       // Bail with the existing state object when the lazy initializer
       // already populated us with the same SVG — avoids a wasted render
@@ -103,6 +126,14 @@ export function Mermaid({ source, onRequestFullscreen }: MermaidProps) {
 
     (async () => {
       try {
+        // Guarantee the Mermaid module's internal theme matches OUR React
+        // cache key BEFORE rendering. ThemeProvider also calls this on
+        // theme changes, but a first-mount race can race the provider's
+        // async effect — calling it inline here makes Mermaid.tsx the
+        // single source of truth for "the SVG paints in `mermaidTheme`".
+        // `setMermaidTheme` is idempotent when the requested theme equals
+        // the current one, so the overlap with ThemeProvider is free.
+        await setMermaidTheme(mermaidTheme);
         const mermaid = (await loadMermaid()).default;
         // Mermaid requires a unique DOM id per render call. Random suffix
         // is enough — this id never reaches the document tree (we drop
@@ -112,7 +143,7 @@ export function Mermaid({ source, onRequestFullscreen }: MermaidProps) {
         // Populate the cache even if the component unmounted mid-render.
         // The SVG is valid output; a subsequent remount of the same source
         // (e.g. after navigating away and back) deserves the cache hit.
-        putCached(source, MERMAID_THEME, svg);
+        putCached(source, mermaidTheme, svg);
         if (cancelled) return;
         setState({ kind: 'rendered', svg });
       } catch (err) {
@@ -125,7 +156,7 @@ export function Mermaid({ source, onRequestFullscreen }: MermaidProps) {
     return () => {
       cancelled = true;
     };
-  }, [source]);
+  }, [source, mermaidTheme]);
 
   // ---- Step 3: after the SVG is in the DOM, attach svg-pan-zoom.
   useEffect(() => {

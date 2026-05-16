@@ -1,0 +1,139 @@
+/* Dark-theme CSS variable overrides (R9.1, R9.3).
+ *
+ * Triggered by `data-theme='dark'` on `<html>`, set by ThemeProvider.
+ *
+ * Palette mirrors GitHub's Primer dark theme so transitions between the
+ * `github-markdown-css` body styling and our chrome stay cohesive.
+ *
+ * Plus: an explicit Shiki dual-theme override block at the bottom that
+ * flips token colors to the dark palette (Shiki emits both `--shiki-light`
+ * and `--shiki-dark` CSS variables when `defaultColor: false` is set in
+ * `markdownPlugins.ts` — see Step 4 there).
+ */
+
+:root[data-theme='dark'] {
+  /* ---- App chrome surfaces ---- */
+  --bg-canvas: #0d1117;
+  --bg-app: #010409;
+  --bg-surface: #161b22;
+  --bg-elevated: #21262d;
+  --bg-hover: rgba(177, 186, 196, 0.12);
+  --bg-active: rgba(177, 186, 196, 0.2);
+  --bg-code-block: #161b22;
+
+  /* ---- Foreground / text ---- */
+  --fg-default: #e6edf3;
+  --fg-muted: #9198a1;
+  --fg-subtle: #7d8590;
+  --fg-on-accent: #ffffff;
+  --fg-link: #4493f8;
+  --fg-link-hover: #79c0ff;
+
+  /* ---- Borders ---- */
+  --border-default: #30363d;
+  --border-muted: #21262d;
+  --border-strong: #484f58;
+
+  /* ---- Accent (focus rings + drag-over outline) ---- */
+  --accent: #2f81f7;
+  --accent-bg-soft: rgba(56, 139, 253, 0.1);
+
+  /* ---- Status / alerts ---- */
+  --bg-error: #da3633;
+  --bg-error-soft: #3d1014;
+  --border-error: #f85149;
+  --fg-error-strong: #ff7b72;
+
+  /* ---- Code-block toolbar ---- */
+  --bg-codeblock-toolbar: rgba(33, 38, 45, 0.85);
+  --bg-codeblock-toolbar-hover: #2d333b;
+  --fg-codeblock-lang: #8b949e;
+
+  /* ---- Frontmatter ---- */
+  --bg-frontmatter: #161b22;
+  --bg-frontmatter-body: #0d1117;
+
+  /* ---- Mermaid container ---- */
+  --bg-mermaid-container: #161b22;
+  --bg-mermaid-toolbar: rgba(33, 38, 45, 0.92);
+  --bg-mermaid-skeleton-from: #21262d;
+  --bg-mermaid-skeleton-to: #30363d;
+
+  /* ---- Image fallback placeholder ---- */
+  --bg-img-placeholder: #161b22;
+  --border-img-placeholder: #30363d;
+  --fg-img-placeholder: #8b949e;
+
+  /* ---- Titlebar tokens (legacy aliases for the existing rules in
+       Titlebar.module.css). ---- */
+  --titlebar-bg: var(--bg-surface);
+  --titlebar-fg: var(--fg-default);
+  --titlebar-border: var(--border-default);
+
+  /* ---- Recent-list tokens (legacy aliases used by EmptyState.module.css). ---- */
+  --recent-hover-bg: var(--bg-hover);
+  --recent-remove-hover-bg: var(--bg-active);
+
+  /* ---- Button tokens (legacy aliases used by EmptyState .openBtn). ---- */
+  --btn-bg: #21262d;
+  --btn-fg: var(--fg-default);
+  --btn-border: var(--border-default);
+  --btn-bg-hover: #30363d;
+  --btn-border-hover: var(--border-strong);
+  --btn-bg-active: #161b22;
+
+  /* ---- Logo block in EmptyState. ---- */
+  --logo-bg: #2f81f7;
+
+  /* ---- Generic text aliases the old CSS referenced (text, text-muted). ---- */
+  --text: var(--fg-default);
+  --text-muted: var(--fg-muted);
+}
+
+/* Override github-markdown-css variables for the markdown body. Mirrors
+ * its built-in dark palette but pinned to our explicit `data-theme`
+ * selector so user-forced dark mode wins over the OS preference rule. */
+:root[data-theme='dark'] .markdown-body {
+  color-scheme: dark;
+  --bgColor-default: #0d1117;
+  --bgColor-muted: #151b23;
+  --fgColor-default: #e6edf3;
+  --fgColor-muted: #9198a1;
+  --fgColor-accent: #4493f8;
+  --borderColor-default: #3d444d;
+  --borderColor-muted: rgba(61, 68, 77, 0.7);
+}
+
+/* Shiki dual-theme color flip (R3.3).
+ *
+ * With `defaultColor: false` set in `markdownPlugins.ts`, Shiki emits
+ * NEITHER an inline `color:` nor a single default — every token span
+ * carries `--shiki-light: #fg1; --shiki-dark: #fg2` (plus per-token
+ * font-style variants) as inline custom properties. User CSS must pick
+ * which variant paints.
+ *
+ * Selector choice — why `.markdown-body pre code span` and NOT `.shiki span`:
+ *   Our `<CodeBlock>` wraps Shiki's rendered `<code>` in a fresh `<pre>`
+ *   that does NOT carry Shiki's `.shiki` class (Shiki's outer `<pre>` is
+ *   consumed by react-markdown's `pre` override). Selecting on `.shiki`
+ *   would silently match nothing and dark mode would render with zero
+ *   syntax highlighting. `.markdown-body pre code span` matches the
+ *   Shiki token spans without needing the `.shiki` class — and is still
+ *   tight enough that no non-Shiki span gets caught (markdown only
+ *   produces `<pre>` for code blocks, and Shiki is the only thing that
+ *   nests `<span>`s inside `<code>`).
+ *
+ * The light-mode painting rule lives in `theme.light.css` (paired
+ * symmetrically with this one); see the corresponding block there.
+ *
+ * `!important` defends against any future Shiki transformer that injects
+ * an inline `color:` — empirically with `defaultColor: false` none do,
+ * but it's cheap insurance and the equivalent `light` rule uses the same
+ * weight so they stay in lockstep.
+ */
+:root[data-theme='dark'] .markdown-body pre code span {
+  color: var(--shiki-dark) !important;
+  font-style: var(--shiki-dark-font-style, inherit);
+  font-weight: var(--shiki-dark-font-weight, inherit);
+  text-decoration: var(--shiki-dark-text-decoration, inherit);
+}

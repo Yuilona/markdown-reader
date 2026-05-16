@@ -1,3 +1,10 @@
+/* Empty-state screen styles.
+ *
+ * PR-6: all hard-coded colors migrated to CSS variables. The legacy
+ * `var(--name, #literal)` fallbacks are removed since theme.light.css
+ * always sets a value on `:root`.
+ */
+
 .container {
   width: 100%;
   height: 100%;
@@ -11,8 +18,8 @@
 }
 
 .dragOver {
-  border-color: var(--accent, #0078d4);
-  background-color: rgba(0, 120, 212, 0.04);
+  border-color: var(--accent);
+  background-color: var(--accent-bg-soft);
 }
 
 .content {
@@ -28,7 +35,7 @@
   width: 72px;
   height: 72px;
   border-radius: 16px;
-  background: var(--logo-bg, #2d2d2d);
+  background: var(--logo-bg);
   color: #ffffff;
   display: inline-flex;
   align-items: center;
@@ -42,38 +49,38 @@
 .hint {
   margin: 0;
   font-size: 16px;
-  color: var(--text-muted, #5a5a5a);
+  color: var(--fg-muted);
 }
 
 .hintSub {
   margin: 0;
   font-size: 13px;
-  color: var(--text-muted, #5a5a5a);
+  color: var(--fg-muted);
 }
 
 .openBtn {
   margin-top: 4px;
   padding: 8px 18px;
   font-size: 14px;
-  background: var(--btn-bg, #ffffff);
-  color: var(--btn-fg, #1f1f1f);
-  border: 1px solid var(--btn-border, #d1d1d1);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border: 1px solid var(--btn-border);
   border-radius: 6px;
   cursor: pointer;
   transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 
 .openBtn:hover {
-  background: var(--btn-bg-hover, #f5f5f5);
-  border-color: var(--btn-border-hover, #b8b8b8);
+  background: var(--btn-bg-hover);
+  border-color: var(--btn-border-hover);
 }
 
 .openBtn:active {
-  background: var(--btn-bg-active, #ebebeb);
+  background: var(--btn-bg-active);
 }
 
 .openBtn:focus-visible {
-  outline: 2px solid var(--accent, #0078d4);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -86,7 +93,7 @@
   margin: 0 0 8px 0;
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-muted, #5a5a5a);
+  color: var(--fg-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -94,7 +101,7 @@
 .recentEmpty {
   margin: 0;
   font-size: 13px;
-  color: var(--text-muted, #8a8a8a);
+  color: var(--fg-subtle);
   font-style: italic;
 }
 
@@ -119,11 +126,11 @@
 }
 
 .recentItem:hover {
-  background: var(--recent-hover-bg, #f0f0f0);
+  background: var(--recent-hover-bg);
 }
 
 .recentItem:focus-visible {
-  outline: 2px solid var(--accent, #0078d4);
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
@@ -137,7 +144,7 @@
 
 .recentName {
   font-size: 14px;
-  color: var(--text, #1f1f1f);
+  color: var(--text);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -146,7 +153,7 @@
 
 .recentDir {
   font-size: 12px;
-  color: var(--text-muted, #8a8a8a);
+  color: var(--fg-subtle);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -156,7 +163,7 @@
 
 .recentTime {
   font-size: 12px;
-  color: var(--text-muted, #8a8a8a);
+  color: var(--fg-subtle);
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -171,7 +178,7 @@
   padding: 0;
   font-size: 12px;
   line-height: 1;
-  color: var(--text-muted, #8a8a8a);
+  color: var(--fg-subtle);
   background: transparent;
   border: none;
   border-radius: 4px;
@@ -186,12 +193,11 @@
 }
 
 .recentRemove:hover {
-  background: var(--recent-remove-hover-bg, #e0e0e0);
-  color: var(--text, #1f1f1f);
+  background: var(--recent-remove-hover-bg);
+  color: var(--text);
 }
 
 .recentRemove:focus-visible {
-  outline: 2px solid var(--accent, #0078d4);
+  outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
-

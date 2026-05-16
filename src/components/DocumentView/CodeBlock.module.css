@@ -1,7 +1,20 @@
 /* Fenced code block wrapper.
  * - `position: relative` anchors the floating toolbar.
- * - The Shiki <pre> keeps its own background; we just add overflow rules
- *   and a subtle border to match GitHub's look. */
+ * - The Shiki <pre> would normally carry its own inline-style backdrop
+ *   (`--shiki-light-bg`/`--shiki-dark-bg`), but `<CodeBlock>` discards
+ *   Shiki's outer <pre> wrapper (react-markdown's `pre` override consumes
+ *   it), so those variables never land at this scope. We instead use our
+ *   own palette tokens (--bg-code-block / --fg-default) which the theme
+ *   files swap on `[data-theme='dark']`.
+ *
+ * PR-6:
+ *   - Font stack pulled from --font-stack-code (R9.6).
+ *   - Toolbar colors migrated to CSS variables so the Copy button stays
+ *     legible in dark mode.
+ *   - Per-token syntax colors paint via theme.light.css /
+ *     theme.dark.css's `.markdown-body pre code span` rules that read
+ *     each span's inline `--shiki-light` / `--shiki-dark` variable.
+ */
 
 .wrapper {
   position: relative;
@@ -13,10 +26,11 @@
   padding: 14px 16px;
   border-radius: 6px;
   overflow-x: auto;
-  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
-  font-size: 14px;
-  line-height: 1.5;
-  /* Shiki injects a background-color via inline style — keep it. */
+  font-family: var(--font-stack-code);
+  font-size: var(--font-size-code);
+  line-height: var(--line-height-code);
+  background-color: var(--bg-code-block);
+  color: var(--fg-default);
 }
 
 .pre code {
@@ -40,13 +54,13 @@
 }
 
 .lang {
-  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  font-family: var(--font-stack-code);
   font-size: 11px;
-  color: #6a737d;
+  color: var(--fg-codeblock-lang);
   text-transform: lowercase;
   user-select: none;
   padding: 2px 6px;
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--bg-codeblock-toolbar);
   border-radius: 4px;
   pointer-events: none;
 }
@@ -54,9 +68,9 @@
 .copyBtn {
   font-family: inherit;
   font-size: 11px;
-  color: #1f1f1f;
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid #d1d5da;
+  color: var(--fg-default);
+  background: var(--bg-codeblock-toolbar);
+  border: 1px solid var(--border-default);
   border-radius: 4px;
   padding: 2px 8px;
   cursor: pointer;
@@ -70,12 +84,12 @@
 }
 
 .copyBtn:hover {
-  background: #ffffff;
-  border-color: #b8b8b8;
+  background: var(--bg-codeblock-toolbar-hover);
+  border-color: var(--border-strong);
 }
 
 .copyBtn:focus-visible {
-  outline: 2px solid #0078d4;
+  outline: 2px solid var(--accent);
   outline-offset: 1px;
   opacity: 1;
 }

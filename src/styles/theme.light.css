@@ -1,0 +1,127 @@
+/* Light-theme CSS variables (R9.1, R9.3).
+ *
+ * Applied two ways:
+ *   1. `:root` — the baseline so EVERY paint defaults to light, even
+ *      before ThemeProvider has set `data-theme`. Avoids a one-frame
+ *      flash of unstyled colors on first mount.
+ *   2. `:root[data-theme='light']` — explicit override beats the
+ *      `[data-theme='dark']` rules in theme.dark.css when the user
+ *      forces light mode regardless of OS preference.
+ *
+ * Palette mirrors GitHub's Primer light theme so that the
+ * `github-markdown-css` body styling (which uses the same `#1f2328` /
+ * `#ffffff` family internally) looks cohesive with our chrome.
+ *
+ * Also overrides the github-markdown-css variables for the .markdown-body
+ * subtree so our explicit light/dark selection wins over its built-in
+ * `@media (prefers-color-scheme: dark)` rule — the user can force light
+ * mode even when their OS is in dark mode.
+ */
+
+:root,
+:root[data-theme='light'] {
+  /* ---- App chrome surfaces ---- */
+  --bg-canvas: #ffffff;             /* main scroll area, body bg */
+  --bg-app: #fafafa;                /* app shell bg behind everything */
+  --bg-surface: #f3f3f3;            /* titlebar, panels */
+  --bg-elevated: #ffffff;           /* cards, popovers, lightbox close on hover */
+  --bg-hover: #f0f0f0;              /* recent-list hover, generic hover */
+  --bg-active: #ebebeb;             /* generic active */
+  --bg-code-block: #f6f8fa;         /* fallback code-block bg (Shiki sets its own) */
+
+  /* ---- Foreground / text ---- */
+  --fg-default: #1f1f1f;            /* body text in our chrome */
+  --fg-muted: #5a5a5a;              /* secondary text (recent dir, hints) */
+  --fg-subtle: #8a8a8a;             /* tertiary (timestamps, placeholders) */
+  --fg-on-accent: #ffffff;          /* text on accent buttons */
+  --fg-link: #0969da;
+  --fg-link-hover: #0550ae;
+
+  /* ---- Borders ---- */
+  --border-default: #d1d1d1;
+  --border-muted: #e5e5e5;
+  --border-strong: #b8b8b8;
+
+  /* ---- Accent (focus rings + drag-over outline) ---- */
+  --accent: #0078d4;
+  --accent-bg-soft: rgba(0, 120, 212, 0.04);
+
+  /* ---- Status / alerts ---- */
+  --bg-error: #d13438;              /* drop-error banner solid */
+  --bg-error-soft: #ffebe9;         /* mermaid error placeholder bg */
+  --border-error: #cf222e;
+  --fg-error-strong: #82071e;
+
+  /* ---- Code-block toolbar ---- */
+  --bg-codeblock-toolbar: rgba(255, 255, 255, 0.85);
+  --bg-codeblock-toolbar-hover: #ffffff;
+  --fg-codeblock-lang: #6a737d;
+
+  /* ---- Frontmatter ---- */
+  --bg-frontmatter: #f8f8f8;
+  --bg-frontmatter-body: #ffffff;
+
+  /* ---- Mermaid container ---- */
+  --bg-mermaid-container: #ffffff;
+  --bg-mermaid-toolbar: rgba(255, 255, 255, 0.92);
+  --bg-mermaid-skeleton-from: #eef0f3;
+  --bg-mermaid-skeleton-to: #f6f8fa;
+
+  /* ---- Image fallback placeholder ---- */
+  --bg-img-placeholder: #f6f8fa;
+  --border-img-placeholder: #d0d7de;
+  --fg-img-placeholder: #57606a;
+
+  /* ---- Titlebar tokens (legacy aliases for the existing rules in
+       Titlebar.module.css). ---- */
+  --titlebar-bg: var(--bg-surface);
+  --titlebar-fg: var(--fg-default);
+  --titlebar-border: var(--border-muted);
+
+  /* ---- Recent-list tokens (legacy aliases used by EmptyState.module.css). ---- */
+  --recent-hover-bg: var(--bg-hover);
+  --recent-remove-hover-bg: #e0e0e0;
+
+  /* ---- Button tokens (legacy aliases used by EmptyState .openBtn). ---- */
+  --btn-bg: #ffffff;
+  --btn-fg: var(--fg-default);
+  --btn-border: var(--border-default);
+  --btn-bg-hover: #f5f5f5;
+  --btn-border-hover: var(--border-strong);
+  --btn-bg-active: var(--bg-active);
+
+  /* ---- Logo block in EmptyState. ---- */
+  --logo-bg: #2d2d2d;
+
+  /* ---- Generic text aliases the old CSS referenced (text, text-muted). ---- */
+  --text: var(--fg-default);
+  --text-muted: var(--fg-muted);
+}
+
+/* Override github-markdown-css variables for the markdown body so our
+ * explicit light theme wins over its `@media (prefers-color-scheme: dark)`
+ * rule when the user has forced light mode on a dark-mode OS. */
+:root[data-theme='light'] .markdown-body {
+  color-scheme: light;
+  --bgColor-default: #ffffff;
+  --bgColor-muted: #f6f8fa;
+  --fgColor-default: #1f2328;
+  --fgColor-muted: #59636e;
+  --fgColor-accent: #0969da;
+  --borderColor-default: #d1d9e0;
+  --borderColor-muted: #d1d9e0b3;
+}
+
+/* Shiki dual-theme color flip — LIGHT mode painting rule (R3.3).
+ *
+ * Paired with the dark rule in theme.dark.css; see the long comment
+ * there for the full rationale (notably why the selector targets
+ * `.markdown-body pre code span` instead of `.shiki span`). Without
+ * this rule, light mode would render tokens as the inherited foreground
+ * color since `defaultColor: false` in Shiki suppresses inline `color:`. */
+:root[data-theme='light'] .markdown-body pre code span {
+  color: var(--shiki-light) !important;
+  font-style: var(--shiki-light-font-style, inherit);
+  font-weight: var(--shiki-light-font-weight, inherit);
+  text-decoration: var(--shiki-light-text-decoration, inherit);
+}

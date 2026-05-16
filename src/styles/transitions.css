@@ -1,0 +1,35 @@
+/* Theme transition animation (R9.2, ADR-lite D1).
+ *
+ * User override of "instant" (the default we proposed): a 200ms fade on
+ * the color/background/border properties when the theme flips. Applied
+ * universally so chrome AND content fade in lockstep.
+ *
+ * Scope: only color-class properties. We deliberately do NOT animate
+ *   - `opacity`     — used by hover toolbar fade-in (would feel sluggish)
+ *   - `transform`   — used by drop-error banner slide-in
+ *   - `box-shadow`  — used by code-block toolbar lift; transitioning it
+ *                     on every render thrashes paint
+ *   - `width/height`— animating these on theme flip would jank layout
+ *
+ * The `*` selector is broad but the property whitelist keeps the
+ * performance cost minimal — modern engines only re-compose the
+ * affected layers, not the full document.
+ *
+ * The `prefers-reduced-motion` query disables the animation for users
+ * who've asked for less motion (accessibility / WCAG 2.3.3 spirit).
+ */
+
+*,
+*::before,
+*::after {
+  transition: background-color 200ms ease, color 200ms ease,
+    border-color 200ms ease, fill 200ms ease, stroke 200ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none;
+  }
+}

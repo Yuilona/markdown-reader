@@ -1,0 +1,66 @@
+/* Bundled font wiring (R9.5, R9.6).
+ *
+ * Sarasa UI SC is the canonical CJK body font. We ship a subsetted
+ * woff2 (~1.5 MB target, common GB2312 + extended GBK characters) so
+ * the bundle stays under 30 MB total (R1.x distribution budget).
+ *
+ * Subset generation:
+ *   The actual font file is fetched + subsetted manually — see
+ *   `src/assets/fonts/README.md` for the recipe (pyftsubset on the
+ *   Sarasa-Gothic GitHub release). A 1-glyph placeholder ships with
+ *   PR-6 so the @font-face URL resolves cleanly in dev; PR-9 (or a
+ *   one-time manual step) replaces it with the real subset.
+ *
+ * Until the real subset is in place, the family chain falls through to
+ * `Segoe UI Variable` / `Microsoft YaHei` / `PingFang SC` — visually
+ * identical-ish on Win11 and ensures NO blank glyphs.
+ *
+ * Code font is unbundled — JetBrains Mono / Cascadia Code / Consolas
+ * are either system-provided on Win11 or fall through to a sane mono
+ * fallback. R9.6 mandates the stack but not a bundle.
+ */
+
+@font-face {
+  font-family: 'Sarasa UI SC';
+  /* Vite resolves relative URLs in CSS at build time. The asset is
+   * fingerprinted + emitted under /assets/ so this URL is rewritten
+   * automatically — no need for a JS-side import. */
+  src: url('../assets/fonts/sarasa-ui-sc-subset.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  /* unicode-range omitted intentionally: the subset itself controls
+   * which glyphs are available; declaring a narrower range here would
+   * force the fallback for characters the subset CAN render. */
+}
+
+/* Font-family stacks exposed as CSS variables so any module can opt in
+ * by writing `font-family: var(--font-stack-body)`. */
+:root {
+  --font-stack-body:
+    'Sarasa UI SC',
+    'Segoe UI Variable',
+    'Segoe UI',
+    'Microsoft YaHei',
+    'PingFang SC',
+    -apple-system,
+    BlinkMacSystemFont,
+    system-ui,
+    sans-serif;
+
+  --font-stack-code:
+    'JetBrains Mono',
+    'Cascadia Code',
+    'Consolas',
+    'Liberation Mono',
+    monospace;
+
+  /* Body / code base sizes (R9.7). Exposed as variables so future
+   * page-zoom wiring (R10.5, PR-8) can scale via a single tweak. */
+  --font-size-body: 16px;
+  --font-size-code: 14px;
+
+  /* Line heights (R9.8). */
+  --line-height-body: 1.7;
+  --line-height-code: 1.5;
+}

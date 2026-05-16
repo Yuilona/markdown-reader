@@ -1,13 +1,16 @@
 /* Collapsible frontmatter widget shown above the article body.
- * Visually subdued so it doesn't compete with the document title. */
+ * Visually subdued so it doesn't compete with the document title.
+ *
+ * PR-6: palette + font stack pulled from theme variables.
+ */
 
 .details {
   margin: 0 0 16px 0;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--border-muted);
   border-radius: 6px;
-  background: #f8f8f8;
+  background: var(--bg-frontmatter);
   font-size: 13px;
-  color: #5a5a5a;
+  color: var(--fg-muted);
 }
 
 .summary {
@@ -27,18 +30,18 @@
 }
 
 .summary:hover {
-  background: #f0f0f0;
+  background: var(--bg-hover);
 }
 
 .summary:focus-visible {
-  outline: 2px solid #0078d4;
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
 .icon {
   display: inline-flex;
   align-items: center;
-  color: #6a6a6a;
+  color: var(--fg-muted);
 }
 
 .label {
@@ -48,12 +51,12 @@
 .body {
   margin: 0;
   padding: 12px 14px;
-  border-top: 1px solid #e5e5e5;
-  background: #ffffff;
-  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  border-top: 1px solid var(--border-muted);
+  background: var(--bg-frontmatter-body);
+  font-family: var(--font-stack-code);
   font-size: 12px;
   line-height: 1.5;
-  color: #1f1f1f;
+  color: var(--fg-default);
   overflow-x: auto;
   border-bottom-left-radius: 6px;
   border-bottom-right-radius: 6px;

@@ -4,15 +4,21 @@
  *   svg-pan-zoom takes over the viewBox math (it removes the SVG's
  *   intrinsic size, so without a floor here the block can briefly
  *   become invisible during the swap).
- * - We also scope hover-driven toolbar visibility to this container. */
+ * - We also scope hover-driven toolbar visibility to this container.
+ *
+ * PR-6: container / toolbar / skeleton / error palette migrated to
+ * CSS variables. The error red is kept semantically (red = danger)
+ * but the actual hue/bg comes from --bg-error-soft / --border-error
+ * which have dark-theme overrides in theme.dark.css.
+ */
 
 .container {
   position: relative;
   margin: 16px 0;
   padding: 8px;
-  border: 1px solid #d0d7de;
+  border: 1px solid var(--border-img-placeholder);
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--bg-mermaid-container);
   min-height: 200px;
   box-sizing: border-box;
   /* Render isolation so a deep zoom doesn't bleed shadows etc. into
@@ -46,8 +52,8 @@
   align-items: center;
   gap: 4px;
   padding: 4px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid #d0d7de;
+  background: var(--bg-mermaid-toolbar);
+  border: 1px solid var(--border-img-placeholder);
   border-radius: 6px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
   opacity: 0;
@@ -71,23 +77,23 @@
   background: transparent;
   border: 1px solid transparent;
   border-radius: 4px;
-  color: #1f2328;
+  color: var(--fg-default);
   cursor: pointer;
   padding: 0;
   user-select: none;
 }
 
 .toolbarBtn:hover {
-  background: #f3f4f6;
-  border-color: #d0d7de;
+  background: var(--bg-hover);
+  border-color: var(--border-img-placeholder);
 }
 
 .toolbarBtn:active {
-  background: #e6e8eb;
+  background: var(--bg-active);
 }
 
 .toolbarBtn:focus-visible {
-  outline: 2px solid #0078d4;
+  outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 
@@ -106,9 +112,9 @@
   border-radius: 6px;
   background: linear-gradient(
     90deg,
-    #eef0f3 0%,
-    #f6f8fa 50%,
-    #eef0f3 100%
+    var(--bg-mermaid-skeleton-from) 0%,
+    var(--bg-mermaid-skeleton-to) 50%,
+    var(--bg-mermaid-skeleton-from) 100%
   );
   background-size: 200% 100%;
   animation: shimmer 1.2s ease-in-out infinite;
@@ -126,32 +132,32 @@
 /* ---- Per-block error fallback (R4.5). Red-bordered placeholder. */
 
 .error {
-  border-color: #cf222e;
-  background: #ffebe9;
+  border-color: var(--border-error);
+  background: var(--bg-error-soft);
   min-height: 0;
 }
 
 .errorTitle {
   font-weight: 600;
-  color: #82071e;
+  color: var(--fg-error-strong);
   margin-bottom: 4px;
 }
 
 .errorMessage {
   margin: 0 0 8px 0;
   padding: 8px;
-  background: #ffffff;
+  background: var(--bg-elevated);
   border-radius: 4px;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  font-family: var(--font-stack-code);
   font-size: 12px;
-  color: #82071e;
+  color: var(--fg-error-strong);
 }
 
 .error details {
   font-size: 12px;
-  color: #57606a;
+  color: var(--fg-muted);
 }
 
 .error summary {
@@ -163,10 +169,10 @@
 .errorSource {
   margin: 4px 0 0 0;
   padding: 8px;
-  background: #ffffff;
+  background: var(--bg-elevated);
   border-radius: 4px;
   overflow-x: auto;
-  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  font-family: var(--font-stack-code);
   font-size: 12px;
-  color: #1f2328;
+  color: var(--fg-default);
 }
