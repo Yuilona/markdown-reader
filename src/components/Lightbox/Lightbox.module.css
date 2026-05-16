@@ -1,0 +1,98 @@
+/* Lightbox / full-screen viewer (R5).
+ *
+ * Layered above EVERYTHING including the custom titlebar (which sits at
+ * the top of the frameless window). The titlebar's drag region is just
+ * CSS — once we cover it with a position:fixed + z-index 9999 overlay,
+ * pointer events on the titlebar are blocked, which is what we want
+ * while the lightbox is open. */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.9); /* R5.3: ~90% opacity */
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Anywhere on the backdrop (i.e. outside the content) closes — make
+   * that affordance explicit via cursor (R5.5). */
+  cursor: zoom-out;
+}
+
+.contentArea {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* panzoom transforms the inner target; the area itself just hosts. */
+  cursor: grab;
+  overflow: hidden;
+}
+
+.contentArea:active {
+  cursor: grabbing;
+}
+
+/* SVG host (Mermaid). The SVG itself stretches to the wrapper bounds so
+ * panzoom's transform-origin math has a stable layout to operate on. */
+.svgWrapper {
+  max-width: 95vw;
+  max-height: 95vh;
+  /* The viewport box the SVG can fill; panzoom will translate/scale this
+   * wrapper, not the SVG. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.svgWrapper > svg {
+  display: block;
+  /* Mermaid's SVG often carries inline width/height attributes — let CSS
+   * win so the diagram scales to the wrapper instead of clipping. */
+  width: 100%;
+  height: auto;
+  max-width: 95vw;
+  max-height: 95vh;
+}
+
+/* Image (raster lightbox). */
+.image {
+  display: block;
+  max-width: 95vw;
+  max-height: 95vh;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Close button — fixed top-right of the overlay. Higher z-index than the
+ * backdrop's own painted layers so it always sits clickable on top. */
+.closeBtn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font-size: 18px;
+  line-height: 1;
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 10000;
+  transition: background 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.closeBtn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.closeBtn:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
