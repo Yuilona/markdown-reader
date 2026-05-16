@@ -15,6 +15,7 @@ import { useShortcuts } from './hooks/useShortcuts';
 import { useDragDrop } from './hooks/useDragDrop';
 import { useFileWatcher } from './hooks/useFileWatcher';
 import { usePrintMode } from './hooks/usePrintMode';
+import { useWindowStatePersistence } from './hooks/useWindowStatePersistence';
 import {
   registerSecondInstanceListener,
   takeCliLaunchPath,
@@ -23,13 +24,8 @@ import { loadDocument, type LoadedDocument } from './lib/tauri';
 import { cleanupStaleTemp } from './lib/recentFiles';
 import { loadUserCss } from './lib/userCss';
 import { LinkRouterContext, type LinkRouterContextValue } from './lib/linkRouter';
-import * as logger from './lib/logger';
-import {
-  DEFAULT_SETTINGS,
-  readSettings,
-  writeSettings,
-  type Settings,
-} from './lib/settings';
+import { DEFAULT_SETTINGS } from './lib/settings';
+import { getSettings, updateSettings } from './lib/settingsStore';
 
 const DROP_ERROR_TEXT = '无法打开：仅支持 .md / .markdown 文件';
 
@@ -76,6 +72,12 @@ export default function App() {
     void loadUserCss();
   }, []);
 
+  // PR-9 hotfix: window position / size / maximized are restored on
+  // mount and re-saved (debounced) on every resize/move/close (R2.8,
+  // R10.1). Lives at the top App so it survives any AppContent remount
+  // (e.g. ErrorBoundary reset) and runs exactly once per process.
+  useWindowStatePersistence();
+
   return (
     <ThemeProvider>
       <PageZoomProvider>
@@ -114,23 +116,22 @@ function AppContent() {
   //
   // TOC default comes from settings.showTocByDefault (R10.2). We start
   // with the DEFAULT_SETTINGS value, then promote to the persisted one
-  // once readSettings() resolves — same pattern ThemeProvider uses.
+  // once the shared settings store resolves — same pattern
+  // ThemeProvider / PageZoomProvider use.
   const [tocVisible, setTocVisible] = useState<boolean>(DEFAULT_SETTINGS.showTocByDefault);
   const [searchOpen, setSearchOpen] = useState(false);
-  // Cached settings snapshot so toggle writes preserve other fields
-  // (theme, pageZoom) that App.tsx doesn't own.
-  const persistedSettingsRef = useRef<Settings>(DEFAULT_SETTINGS);
   // Forwarded to SearchBar — lets the Ctrl+F handler re-focus and
   // select the input when the bar is already open.
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Initial settings load → promote tocVisible to persisted value.
+  // Initial settings load → promote tocVisible to persisted value via
+  // the shared settings store (PR-9 hotfix). No per-component snapshot
+  // ref — the store guarantees write-merges across providers.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const settings = await readSettings();
+      const settings = await getSettings();
       if (cancelled) return;
-      persistedSettingsRef.current = settings;
       setTocVisible(settings.showTocByDefault);
     })();
     return () => {
@@ -207,23 +208,15 @@ function AppContent() {
     });
   }, []);
 
-  // PR-7: Ctrl+\ handler. Toggles AND persists. We persist the same
-  // way ThemeProvider does: round-trip the cached settings so we don't
-  // clobber theme / pageZoom.
+  // PR-7: Ctrl+\ handler. Toggles AND persists.
+  // PR-9 hotfix: persistence goes through the shared `settingsStore`,
+  // which merges into the live cache and serializes the atomic write so
+  // a concurrent ThemeProvider / PageZoomProvider write can't clobber
+  // showTocByDefault (and we can't clobber theirs).
   const handleToggleToc = useCallback(() => {
     setTocVisible((prev) => {
       const next = !prev;
-      const updated: Settings = {
-        ...persistedSettingsRef.current,
-        showTocByDefault: next,
-      };
-      persistedSettingsRef.current = updated;
-      void writeSettings(updated).catch((err) => {
-        // PR-8: route through rolling logger AND console (logger.warn
-        // calls console.warn internally), so a persistence failure lands
-        // in data/logs/app.log on top of DevTools.
-        logger.warn('failed to persist showTocByDefault:', err);
-      });
+      void updateSettings({ showTocByDefault: next });
       return next;
     });
   }, []);

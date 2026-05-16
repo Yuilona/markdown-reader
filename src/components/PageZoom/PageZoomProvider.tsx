@@ -8,13 +8,8 @@ import {
   type ReactNode,
 } from 'react';
 
-import {
-  DEFAULT_SETTINGS,
-  readSettings,
-  writeSettings,
-  type Settings,
-} from '../../lib/settings';
-import * as logger from '../../lib/logger';
+import { DEFAULT_SETTINGS } from '../../lib/settings';
+import { getSettings, updateSettings } from '../../lib/settingsStore';
 
 /**
  * Page-level zoom (R10.5, R13) — PR-9.
@@ -26,15 +21,16 @@ import * as logger from '../../lib/logger';
  * too, which looks odd.
  *
  * Persistence: the chosen value is written through to settings.json on
- * every change. We use the same round-trip pattern as ThemeProvider so
- * the persistence write doesn't clobber other persisted fields
- * (theme, showTocByDefault).
+ * every change via the shared `settingsStore` (PR-9 hotfix). The store
+ * serializes writes so a concurrent ThemeProvider / App.tsx update can't
+ * clobber our pageZoom (and vice versa).
  *
  * Initial paint behaviour: we default to 100 (DEFAULT_SETTINGS.pageZoom)
- * before the async settings load completes. Once readSettings resolves,
- * we promote to the persisted value. If the user has a persisted
- * non-100 zoom, they'll see a brief flicker on cold start — same as
- * the theme provider's brief flicker pattern. Acceptable for v0.1.
+ * before the async settings load completes. Once getSettings resolves
+ * from the shared store, we promote to the persisted value. If the user
+ * has a persisted non-100 zoom, they'll see a brief flicker on cold
+ * start — same as the theme provider's brief flicker pattern.
+ * Acceptable for v0.1.
  *
  * Why NOT `document.documentElement.style.zoom`: zooming the html
  * element causes the WebView2 scrollbar to render at the zoomed size,
@@ -98,18 +94,15 @@ export function PageZoomProvider({ children }: PageZoomProviderProps) {
   // settings.json with its own default value (harmless, but extra IO).
   const initializedRef = useRef(false);
 
-  // Most-recent settings snapshot from disk. Used by the write-back so
-  // we preserve fields PR-9's zoom provider doesn't own (theme,
-  // showTocByDefault).
-  const persistedSettingsRef = useRef<Settings>(DEFAULT_SETTINGS);
-
-  // ---- Mount: load persisted zoom. ----
+  // ---- Mount: load persisted zoom via the shared settings store. ----
+  // The store owns the cache; no per-provider snapshot ref needed.
+  // Theme + showTocByDefault writes from peers stay safe because the
+  // store merges partials atomically (PR-9 hotfix).
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const settings = await readSettings();
+      const settings = await getSettings();
       if (cancelled) return;
-      persistedSettingsRef.current = settings;
       const next = snapAndClamp(settings.pageZoom);
       setZoomState(next);
       // Flag set AFTER state updates so the [zoom] write-back effect
@@ -147,18 +140,14 @@ export function PageZoomProvider({ children }: PageZoomProviderProps) {
     };
   }, []);
 
-  // ---- Persist `zoom` to settings.json whenever it changes (after the
-  //      initial load completes). ----
+  // ---- Persist `zoom` via the shared settings store whenever it
+  //      changes (after the initial load completes). ----
+  // `updateSettings` merges into the live cache and serializes the
+  // atomic write — peer providers' fields are preserved automatically.
+  // Errors are logged inside the store; we discard the returned promise.
   useEffect(() => {
     if (!initializedRef.current) return;
-    const updated: Settings = {
-      ...persistedSettingsRef.current,
-      pageZoom: zoom,
-    };
-    persistedSettingsRef.current = updated;
-    void writeSettings(updated).catch((err) => {
-      logger.warn('failed to persist pageZoom:', err);
-    });
+    void updateSettings({ pageZoom: zoom });
   }, [zoom]);
 
   const zoomIn = useCallback(() => {

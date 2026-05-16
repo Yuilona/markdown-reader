@@ -10,13 +10,10 @@ import {
 
 import {
   DEFAULT_SETTINGS,
-  readSettings,
-  writeSettings,
-  type Settings,
   type ThemeMode,
 } from '../../lib/settings';
+import { getSettings, updateSettings } from '../../lib/settingsStore';
 import { setMermaidTheme, type MermaidTheme } from '../../lib/mermaidLazy';
-import * as logger from '../../lib/logger';
 
 /**
  * Theme system (R9.1-R9.2, R10.2, R4.3).
@@ -40,7 +37,10 @@ import * as logger from '../../lib/logger';
  *
  * Persistence:
  *   The selected `mode` is written through to `settings.json` on every
- *   change. We do NOT persist `effective` — it's a derived value.
+ *   change via the shared `settingsStore` (PR-9 hotfix). The store
+ *   serializes writes across providers so concurrent updates from
+ *   PageZoomProvider / App.tsx can't clobber each other. We do NOT
+ *   persist `effective` — it's a derived value.
  */
 
 export interface ThemeContextValue {
@@ -96,17 +96,15 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   // its own loaded value (a harmless but ugly disk churn).
   const initializedRef = useRef(false);
 
-  /** The most-recent settings snapshot read from disk. Used by the
-   *  write-back effect to preserve fields PR-6 doesn't manage. */
-  const persistedSettingsRef = useRef<Settings>(DEFAULT_SETTINGS);
-
-  // ---- Mount: load persisted mode. ----
+  // ---- Mount: load persisted mode via the shared settings store. ----
+  // No per-provider snapshot ref anymore — the store owns the cache and
+  // merges partial updates atomically, so PageZoomProvider / App.tsx can
+  // write their own fields without our `theme` being clobbered.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const settings = await readSettings();
+      const settings = await getSettings();
       if (cancelled) return;
-      persistedSettingsRef.current = settings;
       setModeState(settings.theme);
       setEffective(resolveEffective(settings.theme));
       // Flag set AFTER state updates so the [mode] write-back effect
@@ -129,24 +127,15 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     void setMermaidTheme(mermaidThemeFor(effective));
   }, [effective]);
 
-  // ---- Persist `mode` to settings.json whenever it changes
-  //      (after the initial load completes). ----
+  // ---- Persist `mode` via the shared settings store whenever it
+  //      changes (after the initial load completes). ----
+  // `updateSettings` merges into the live cache and serializes the
+  // atomic write — it preserves pageZoom / showTocByDefault without us
+  // needing to round-trip a stale snapshot. Errors are logged inside
+  // the store; we deliberately discard the returned promise here.
   useEffect(() => {
     if (!initializedRef.current) return;
-    // Round-trip the OTHER persisted fields so a user's pageZoom /
-    // showTocByDefault aren't clobbered.
-    const updated: Settings = {
-      ...persistedSettingsRef.current,
-      theme: mode,
-    };
-    persistedSettingsRef.current = updated;
-    void writeSettings(updated).catch((err) => {
-      // PR-8: route persistence failures through the rolling logger so
-      // a write error lands in data/logs/app.log on top of the console.
-      // logger.warn mirrors to console.warn under the hood so the prior
-      // DevTools behavior is preserved.
-      logger.warn('failed to write settings.json:', err);
-    });
+    void updateSettings({ theme: mode });
   }, [mode]);
 
   // ---- Subscribe to OS prefers-color-scheme only while mode === 'system'. ----
