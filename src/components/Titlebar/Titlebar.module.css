@@ -3,6 +3,11 @@
  *
  * PR-6: hard-coded colors replaced by CSS variables. Theme transitions
  * (200ms) are inherited from transitions.css's universal rule.
+ *
+ * v1.0 PR-A (R-EDIT-3.2, R-EDIT-5.3): title is now centered (so the
+ * dirty marker + filename read as a single composed unit), and the
+ * controls cluster on the right gains an additional edit-mode toggle
+ * button to the left of the theme button.
  */
 
 .titlebar {
@@ -18,9 +23,21 @@
   flex: 0 0 auto;
 }
 
+/* v1.0 PR-A: title is centered. We keep `flex: 1 1 auto` so the title
+ * cell fills the remaining width between the left edge and the
+ * controls cluster on the right; `text-align: center` centers the
+ * text within that cell. The leading drag-region is still here so the
+ * user can drag the window anywhere on the title bar.
+ *
+ * Note: the visual centering is anchored to the title cell's bounds,
+ * NOT to the viewport center. With a 4-button controls cluster on the
+ * right (~180px wide) the title's visual center is slightly left of
+ * the geometric viewport center. That's fine: the user reads the
+ * title in context with the surrounding chrome, not against a ruler. */
 .title {
   display: flex;
   align-items: center;
+  justify-content: center;
   padding: 0 12px;
   font-size: 12px;
   font-weight: 400;
@@ -30,6 +47,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: center;
 }
 
 .controls {
@@ -73,6 +91,27 @@
  * the Win11 spacing rhythm. */
 .themeBtn {
   width: 38px;
+}
+
+/* v1.0 PR-A: edit-mode toggle (R-EDIT-3.2). Same narrow width as the
+ * theme button — both are "secondary" affordances paired before the
+ * window-control trio. When the editor is active we show a subtle
+ * accent highlight underneath the glyph (via aria-pressed) so the
+ * user has a clear visual signal "edit mode is on right now". */
+.editBtn {
+  width: 38px;
+  position: relative;
+}
+
+.editBtn[aria-pressed='true']::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 4px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
 }
 
 /* Close button gets red fill on hover, white icon. Kept hard-coded

@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+
 import { Titlebar } from './components/Titlebar/Titlebar';
 import { EmptyState } from './components/EmptyState/EmptyState';
 import { DocumentView } from './components/DocumentView/DocumentView';
@@ -11,9 +13,15 @@ import { ContextMenuProvider } from './components/ContextMenu/ContextMenuContext
 import { StatusBarProvider } from './components/StatusBar/StatusBarContext';
 import { StatusBar } from './components/StatusBar/StatusBar';
 import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary';
+import { ConfirmProvider } from './components/ConfirmDialog/useConfirm';
+import { EditModeProvider } from './components/EditModeProvider/EditModeProvider';
+import { useEditMode } from './components/EditModeProvider/useEditMode';
+import { EditorSkeleton } from './components/Editor/EditorSkeleton';
+import { SplitView } from './components/SplitView/SplitView';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useDragDrop } from './hooks/useDragDrop';
 import { useFileWatcher } from './hooks/useFileWatcher';
+import { useDirtyGuard } from './hooks/useDirtyGuard';
 import { usePrintMode } from './hooks/usePrintMode';
 import { useWindowStatePersistence } from './hooks/useWindowStatePersistence';
 import {
@@ -26,8 +34,20 @@ import { loadUserCss } from './lib/userCss';
 import { LinkRouterContext, type LinkRouterContextValue } from './lib/linkRouter';
 import { DEFAULT_SETTINGS } from './lib/settings';
 import { getSettings, updateSettings } from './lib/settingsStore';
+import * as logger from './lib/logger';
 
 const DROP_ERROR_TEXT = '无法打开：仅支持 .md / .markdown 文件';
+
+/**
+ * v1.0 PR-A (R-EDIT-1.2): the CodeMirror editor is lazy-loaded so the
+ * heavy CM6 chunk (~200 KB gzip) only ships when the user first enters
+ * edit mode. The fallback `<EditorSkeleton>` paints briefly during the
+ * first download; subsequent mode toggles use the cached chunk.
+ *
+ * The lazy() call has to live at module scope (not inside the
+ * component) so React caches the imported module across renders.
+ */
+const CodeMirrorEditor = lazy(() => import('./components/Editor/CodeMirrorEditor'));
 
 /**
  * PR-6: outer App is a thin wrapper that mounts <ThemeProvider> so every
@@ -35,22 +55,18 @@ const DROP_ERROR_TEXT = '无法打开：仅支持 .md / .markdown 文件';
  * Ctrl+T handler) can call useTheme(). The actual app body lives in
  * <AppContent> to keep the provider boundary clean.
  *
- * PR-9 provider nesting (outer → inner):
+ * Provider nesting (outer → inner):
  *   ThemeProvider
  *     PageZoomProvider           ← exposes usePageZoom() (R10.5, R13)
  *       ToastProvider            ← exposes useToast()
  *         ContextMenuProvider    ← exposes useContextMenu()
  *           StatusBarProvider    ← exposes useStatusBar()
- *             AppContent
- *               Titlebar         (OUTSIDE the error boundary so the
- *                                 user can always close the window)
- *               LightboxProvider
- *                 LinkRouterProvider
- *                   main
- *                     ErrorBoundary
- *                       DocumentView / EmptyState
- *               StatusBar        (mounted after main so it sits at the
- *                                 bottom of `.app-root`)
+ *             ConfirmProvider    ← v1.0 PR-A: exposes useConfirm()
+ *                                  (3-button modal — for dirty guard +
+ *                                  watcher conflict)
+ *               AppContent
+ *                 (wraps the body in EditModeProvider — see below for
+ *                 why that lives inside AppContent and not here)
  *
  * The error boundary intentionally wraps ONLY the document tree. A
  * render crash inside DocumentView still leaves the Titlebar, theme
@@ -59,23 +75,12 @@ const DROP_ERROR_TEXT = '无法打开：仅支持 .md / .markdown 文件';
  * We also fire `loadUserCss()` here (not inside AppContent) so the
  * read-once user.css inject runs exactly once for the app lifetime,
  * regardless of any future remount of the body.
- *
- * PageZoomProvider sits between ThemeProvider and ToastProvider because
- * (a) useShortcuts (mounted inside AppContent) needs both providers in
- * scope, and (b) page zoom is a "chrome-level" concern alongside theme
- * — both are persisted in settings.json and applied to the root DOM, so
- * grouping them at the top of the provider tree keeps the persistence
- * round-trip pattern symmetric.
  */
 export default function App() {
   useEffect(() => {
     void loadUserCss();
   }, []);
 
-  // PR-9 hotfix: window position / size / maximized are restored on
-  // mount and re-saved (debounced) on every resize/move/close (R2.8,
-  // R10.1). Lives at the top App so it survives any AppContent remount
-  // (e.g. ErrorBoundary reset) and runs exactly once per process.
   useWindowStatePersistence();
 
   return (
@@ -84,7 +89,9 @@ export default function App() {
         <ToastProvider>
           <ContextMenuProvider>
             <StatusBarProvider>
-              <AppContent />
+              <ConfirmProvider>
+                <AppContent />
+              </ConfirmProvider>
             </StatusBarProvider>
           </ContextMenuProvider>
         </ToastProvider>
@@ -106,27 +113,12 @@ function AppContent() {
   const [doc, setDoc] = useState<LoadedDocument | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
-  // ---- PR-7: TOC visibility + SearchBar visibility. ----
-  //
-  // Both pieces of UI are document-scoped (they only render inside
-  // DocumentView), but the keyboard shortcuts that toggle them live in
-  // `useShortcuts` at the App level. Lifting the state here lets the
-  // shortcut callbacks flip it while DocumentView still reads + renders
-  // the actual components.
-  //
-  // TOC default comes from settings.showTocByDefault (R10.2). We start
-  // with the DEFAULT_SETTINGS value, then promote to the persisted one
-  // once the shared settings store resolves — same pattern
-  // ThemeProvider / PageZoomProvider use.
   const [tocVisible, setTocVisible] = useState<boolean>(DEFAULT_SETTINGS.showTocByDefault);
   const [searchOpen, setSearchOpen] = useState(false);
-  // Forwarded to SearchBar — lets the Ctrl+F handler re-focus and
-  // select the input when the bar is already open.
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Initial settings load → promote tocVisible to persisted value via
-  // the shared settings store (PR-9 hotfix). No per-component snapshot
-  // ref — the store guarantees write-merges across providers.
+  // the shared settings store (PR-9 hotfix).
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -139,10 +131,6 @@ function AppContent() {
     };
   }, []);
 
-  // PR-8: showError replaces the PR-5a inline-banner state. Callers
-  // hand us a one-line message and we route through toast.show with
-  // variant 'error'. Errors are sticky by default — the user dismisses
-  // them via the toast's ✕ button.
   const showError = useCallback(
     (message: string, details?: string) => {
       toast.show(message, { variant: 'error', details });
@@ -154,20 +142,6 @@ function AppContent() {
     showError(DROP_ERROR_TEXT);
   }, [showError]);
 
-  /**
-   * The single funnel that EVERY file-open path goes through:
-   *   - Ctrl+O dialog (via useShortcuts)
-   *   - Drag-drop (via useDragDrop)
-   *   - Recent-list click (via EmptyState → RecentList)
-   *   - Second-instance event (via registerSecondInstanceListener)
-   *   - CLI argv (via takeCliLaunchPath on mount)
-   *   - PR-5b: in-doc link to a local .md (via LinkRouterContext)
-   *   - PR-8: ErrorBoundary reset (re-load the current doc.path)
-   *
-   * loadDocument() itself handles read + recent.json update + path
-   * normalization, so this wrapper is essentially "load then promote
-   * to state, or show an error toast".
-   */
   const setDocFromPath = useCallback(
     async (path: string): Promise<void> => {
       const loaded = await loadDocument(path);
@@ -180,24 +154,26 @@ function AppContent() {
     [showError],
   );
 
-  // PR-5b: file-watcher reload swaps doc.text WITHOUT changing doc.path,
-  // which means DocumentView keeps its scroll container mounted and the
-  // user's scroll position survives the re-render naturally.
-  const onWatcherReload = useCallback((reloaded: LoadedDocument) => {
-    setDoc(reloaded);
+  /**
+   * v1.0 PR-A: invoked by EditModeProvider after a successful save
+   * (Ctrl+S OR silent-save-on-mode-flip). We mint a fresh
+   * LoadedDocument with the same path + the just-written text so
+   * `doc.text === bufferText` and the derived `dirty` bit becomes
+   * false. The path is unchanged, so the scroll container stays
+   * mounted and the file watcher continues to watch the same file.
+   *
+   * Why we don't re-read from disk: the just-written text is already
+   * authoritative — re-reading would be a wasted round-trip AND would
+   * race with our own watcher event (which fires for our own writes).
+   */
+  const handleDocTextSync = useCallback((text: string) => {
+    setDoc((prev) => (prev ? { ...prev, text } : prev));
   }, []);
-  useFileWatcher({
-    currentPath: doc?.path ?? null,
-    onReload: onWatcherReload,
-  });
 
-  // PR-7: Ctrl+F handler. When the bar is already open, re-focus +
-  // select the input so the user can re-type to replace their previous
-  // query immediately.
+  // PR-7: Ctrl+F handler.
   const handleOpenSearch = useCallback(() => {
     setSearchOpen((prev) => {
       if (prev) {
-        // Already open — re-focus + select.
         requestAnimationFrame(() => {
           searchInputRef.current?.focus();
           searchInputRef.current?.select();
@@ -208,11 +184,7 @@ function AppContent() {
     });
   }, []);
 
-  // PR-7: Ctrl+\ handler. Toggles AND persists.
-  // PR-9 hotfix: persistence goes through the shared `settingsStore`,
-  // which merges into the live cache and serializes the atomic write so
-  // a concurrent ThemeProvider / PageZoomProvider write can't clobber
-  // showTocByDefault (and we can't clobber theirs).
+  // PR-7: Ctrl+\ handler.
   const handleToggleToc = useCallback(() => {
     setTocVisible((prev) => {
       const next = !prev;
@@ -221,20 +193,12 @@ function AppContent() {
     });
   }, []);
 
-  // PR-9: Ctrl+W handler — drop back to EmptyState. setDoc(null) on an
-  // already-null state is a React no-op (referential equality skips the
-  // re-render), so we don't need an "is anything open?" guard.
+  // PR-9: Ctrl+W handler — drop back to EmptyState.
   const handleCloseDocument = useCallback(() => {
     setDoc(null);
   }, []);
 
-  // PR-9: Ctrl+R / F5 handler — re-read the current file via the same
-  // path the file-watcher uses (skipRecent: true so a manual reload
-  // doesn't bump the recent-list). DocumentView keeps its scroll
-  // container mounted because we only swap doc.text (path is unchanged),
-  // which means useScrollMemory's restore path doesn't re-run and the
-  // current scroll position survives the reload naturally — same
-  // semantics as the file-watcher auto-reload (R2.6).
+  // PR-9: Ctrl+R / F5 handler — re-read the current file.
   const handleReloadDocument = useCallback(() => {
     const path = doc?.path;
     if (!path) return;
@@ -247,18 +211,6 @@ function AppContent() {
       }
     })();
   }, [doc, showError]);
-
-  // Wire Ctrl+O / Ctrl+T / Ctrl+F / Ctrl+\ / Ctrl+P / Ctrl+W / Ctrl+Q /
-  // Ctrl+R / F5 / Ctrl+= / Ctrl+- / Ctrl+0 / F11. The shortcut returns
-  // a LoadedDocument for Ctrl+O (recent already updated by
-  // openFileDialog → loadDocument); we just promote it.
-  useShortcuts({
-    onOpenDocument: setDoc,
-    onOpenSearch: handleOpenSearch,
-    onToggleToc: handleToggleToc,
-    onCloseDocument: handleCloseDocument,
-    onReloadDocument: handleReloadDocument,
-  });
 
   // Wire drag-drop at the webview level.
   useDragDrop({
@@ -286,10 +238,7 @@ function AppContent() {
     };
   }, [setDocFromPath, showDropError]);
 
-  // PR-5b: link router context. In-doc anchor `<a>` overrides pull this
-  // to route local .md clicks back to `setDocFromPath` and to surface
-  // shell.open failures through the toast system (PR-8 replaces the
-  // PR-5a banner with toast.show under the same `showError` API).
+  // PR-5b: link router context.
   const linkRouterValue = useMemo<LinkRouterContextValue>(
     () => ({
       openDocument: (p) => {
@@ -300,25 +249,12 @@ function AppContent() {
     [setDocFromPath, showError],
   );
 
-  // PR-7: close the SearchBar when there's no document — the bar is
-  // useless without an article to walk. Reset on doc change too: a fresh
-  // document means the previously-wrapped marks (which were in the
-  // outgoing doc's tree) are gone.
   useEffect(() => {
     if (!doc) setSearchOpen(false);
   }, [doc]);
 
   const handleCloseSearch = useCallback(() => setSearchOpen(false), []);
 
-  // PR-8 ErrorBoundary reset:
-  //   When the user clicks "重新加载" in the fallback UI, we clear the
-  //   current doc and re-load from the same path. Two-phase reset:
-  //     1. setDoc(null) so the boundary sees a different `resetKey` and
-  //        clears its error state.
-  //     2. void setDocFromPath(path) re-fetches the file. If the file
-  //        itself is what crashed render (e.g. a Mermaid block triggered
-  //        a deep mermaid bug), the user can fall back to ✕-closing the
-  //        toast and dragging in a different file.
   const handleBoundaryReset = useCallback(() => {
     const path = doc?.path;
     setDoc(null);
@@ -327,40 +263,262 @@ function AppContent() {
     }
   }, [doc, setDocFromPath]);
 
-  // LightboxProvider wraps the main content so DocumentView's Mermaid
-  // toolbar + image click can dispatch open(). LinkRouterContext wraps
-  // it for the same reason on the `<a>` override.
+  // v1.0 PR-A: EditModeProvider wraps the rest of AppContent. It
+  // needs to be INSIDE ToastProvider + ConfirmProvider (so save +
+  // dirty-guard work) and INSIDE LinkRouterContext (so the
+  // useFileWatcher hook below it can read the edit-mode state).
+  return (
+    <LinkRouterContext.Provider value={linkRouterValue}>
+      <EditModeProvider doc={doc} onDocTextSync={handleDocTextSync}>
+        <AppBody
+          doc={doc}
+          isDragOver={isDragOver}
+          tocVisible={tocVisible}
+          searchOpen={searchOpen}
+          searchInputRef={searchInputRef}
+          handleOpenSearch={handleOpenSearch}
+          handleToggleToc={handleToggleToc}
+          handleCloseDocument={handleCloseDocument}
+          handleReloadDocument={handleReloadDocument}
+          handleCloseSearch={handleCloseSearch}
+          handleBoundaryReset={handleBoundaryReset}
+          setDoc={setDoc}
+          setDocFromPath={setDocFromPath}
+        />
+      </EditModeProvider>
+    </LinkRouterContext.Provider>
+  );
+}
+
+interface AppBodyProps {
+  doc: LoadedDocument | null;
+  isDragOver: boolean;
+  tocVisible: boolean;
+  searchOpen: boolean;
+  searchInputRef: React.RefObject<HTMLInputElement>;
+  handleOpenSearch: () => void;
+  handleToggleToc: () => void;
+  handleCloseDocument: () => void;
+  handleReloadDocument: () => void;
+  handleCloseSearch: () => void;
+  handleBoundaryReset: () => void;
+  setDoc: React.Dispatch<React.SetStateAction<LoadedDocument | null>>;
+  setDocFromPath: (path: string) => Promise<void>;
+}
+
+/**
+ * v1.0 PR-A: the actual app body lives in a sub-component so we can
+ * call `useEditMode()` and `useFileWatcher()` — both depend on
+ * EditModeProvider being mounted, which AppContent installs as our
+ * parent.
+ *
+ * Splitting AppContent / AppBody this way:
+ *   - Keeps the provider tree linear and obvious.
+ *   - Lets useFileWatcher pull from EditModeProvider via its own
+ *     `useEditMode()` call (no prop drilling for the conflict
+ *     dialog's mode/dirty state).
+ *   - Lets the dirty-guard wrap Ctrl+W + onCloseRequested in ONE
+ *     place where both the EditMode state and the close-handler
+ *     callbacks are in scope.
+ */
+function AppBody(props: AppBodyProps) {
+  const {
+    doc,
+    isDragOver,
+    tocVisible,
+    searchOpen,
+    searchInputRef,
+    handleOpenSearch,
+    handleToggleToc,
+    handleCloseDocument,
+    handleReloadDocument,
+    handleCloseSearch,
+    handleBoundaryReset,
+    setDoc,
+    setDocFromPath,
+  } = props;
+
+  const { mode, bufferText, setBufferText, dirty, save, toggleMode } = useEditMode();
+
+  // Dirty guard — used by Ctrl+W, Ctrl+R, and the window close handler.
+  // Save callback closes over the EditModeProvider's save fn; the guard
+  // shows the 3-button prompt when dirty.
+  const guardedSave = useCallback(async () => {
+    await save();
+  }, [save]);
+  const { guardedAction } = useDirtyGuard(dirty, guardedSave);
+
+  // v1.0 PR-A wraps Ctrl+W with the dirty guard. The unwrapped close
+  // is still the underlying action (drop the doc → EmptyState).
+  const handleGuardedCloseDocument = useCallback(() => {
+    void guardedAction(async () => {
+      handleCloseDocument();
+    });
+  }, [guardedAction, handleCloseDocument]);
+
+  // Ctrl+R: when dirty, ask before reloading (a reload swaps doc.text
+  // out from under the editor, which EditModeProvider's reset effect
+  // would happily overwrite). When clean, just reload.
+  const handleGuardedReloadDocument = useCallback(() => {
+    void guardedAction(async () => {
+      handleReloadDocument();
+    });
+  }, [guardedAction, handleReloadDocument]);
+
+  // v1.0 PR-A: Ctrl+E toggles edit mode through the provider.
+  const handleToggleEditMode = useCallback(() => {
+    void toggleMode();
+  }, [toggleMode]);
+
+  // v1.0 PR-A: Ctrl+S explicit save. Guard against "no doc" (the
+  // EditModeProvider's save no-ops in that case, but skipping the
+  // call avoids a meaningless toast attempt). Errors are surfaced
+  // inside save() itself via toast — we just log here for telemetry.
+  const handleSaveDocument = useCallback(() => {
+    if (!doc) return;
+    void save().catch((err) => {
+      logger.warn('Ctrl+S save failed:', err);
+    });
+  }, [doc, save]);
+
+  // Wire the global keyboard shortcuts.
+  useShortcuts({
+    onOpenDocument: setDoc,
+    onOpenSearch: handleOpenSearch,
+    onToggleToc: handleToggleToc,
+    onCloseDocument: handleGuardedCloseDocument,
+    onReloadDocument: handleGuardedReloadDocument,
+    onToggleEditMode: handleToggleEditMode,
+    onSaveDocument: handleSaveDocument,
+  });
+
+  // v1.0 PR-A: file watcher with conflict handling. The hook itself
+  // reads useEditMode() to decide between silent-reload and the
+  // conflict prompt — see useFileWatcher's R-EDIT-8 implementation.
+  // Here we just pass the path + the silent-reload callback.
+  const onWatcherReload = useCallback((reloaded: LoadedDocument) => {
+    setDoc(reloaded);
+  }, [setDoc]);
+  useFileWatcher({
+    currentPath: doc?.path ?? null,
+    onReload: onWatcherReload,
+  });
+
+  // v1.0 PR-A: window-close request from the OS / titlebar ✕. Wrap
+  // with the dirty guard so the user can't lose unsaved edits by
+  // clicking the close button. Tauri's `onCloseRequested` event lets
+  // us call `preventDefault()` to suppress the close — that's how
+  // the cancel branch of the guard avoids actually closing.
+  //
+  // Wiring constraint: this effect must run AFTER the EditModeProvider
+  // is mounted (so the guardedAction closes over the live `dirty`
+  // bit). Since we're inside AppBody, that's already the case.
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const win = getCurrentWindow();
+        const un = await win.onCloseRequested(async (event) => {
+          if (!dirty) return; // No guard needed — let the close proceed.
+          event.preventDefault();
+          // Now run the prompt. If the user picks discard / save +
+          // succeed, re-issue the close. The `cancel` branch leaves
+          // the window open (we already preventDefault'd above).
+          void guardedAction(async () => {
+            // We've already preventDefault'd the OS-driven close; to
+            // actually close after a successful prompt resolution, call
+            // `win.close()`. The dirty bit is now false (save case) or
+            // the user accepted discard.
+            try {
+              await win.close();
+            } catch (err) {
+              logger.warn('window close after guard failed:', err);
+            }
+          });
+        });
+        if (cancelled) {
+          un();
+        } else {
+          unlisten = un;
+        }
+      } catch (err) {
+        logger.warn('onCloseRequested wiring failed:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+    };
+  }, [dirty, guardedAction]);
+
+  // v1.0 PR-A (R-EDIT-2.4 / R-EDIT-9.7): TOC sidebar auto-hides while
+  // in edit mode. The persisted visibility is left alone (this is a
+  // transient hide, not a setting flip), so switching back to read
+  // mode restores whatever the user had before.
+  const effectiveTocVisible = mode === 'edit' ? false : tocVisible;
+
+  // v1.0 PR-A: in edit mode, render a SplitView with the CM6 editor on
+  // the left/top and DocumentView (preview) on the right/bottom. The
+  // editor's onChange writes to bufferText via EditModeProvider; the
+  // preview reads editText (which is bufferText after a 500ms
+  // debounce — see DocumentView's useDebouncedValue).
+  const showSplit = doc !== null && mode === 'edit';
+
   return (
     <div className="app-root">
-      <Titlebar />
-      <LinkRouterContext.Provider value={linkRouterValue}>
-        <LightboxProvider>
-          <main className="app-main">
-            <ErrorBoundary
-              onReset={handleBoundaryReset}
-              resetKey={doc?.path ?? null}
-            >
-              {doc ? (
+      <Titlebar docPath={doc?.path ?? null} />
+      <LightboxProvider>
+        <main className="app-main">
+          <ErrorBoundary
+            onReset={handleBoundaryReset}
+            resetKey={doc?.path ?? null}
+          >
+            {doc ? (
+              showSplit ? (
+                <SplitView
+                  left={
+                    <Suspense fallback={<EditorSkeleton />}>
+                      <CodeMirrorEditor
+                        value={bufferText}
+                        onChange={setBufferText}
+                      />
+                    </Suspense>
+                  }
+                  right={
+                    <DocumentView
+                      doc={doc}
+                      tocVisible={effectiveTocVisible}
+                      onToggleToc={handleToggleToc}
+                      searchOpen={searchOpen}
+                      onCloseSearch={handleCloseSearch}
+                      searchInputRef={searchInputRef}
+                      editText={bufferText}
+                    />
+                  }
+                />
+              ) : (
                 <DocumentView
                   doc={doc}
-                  tocVisible={tocVisible}
+                  tocVisible={effectiveTocVisible}
                   onToggleToc={handleToggleToc}
                   searchOpen={searchOpen}
                   onCloseSearch={handleCloseSearch}
                   searchInputRef={searchInputRef}
                 />
-              ) : (
-                <EmptyState
-                  onOpen={setDoc}
-                  onPickRecent={setDocFromPath}
-                  isDragOver={isDragOver}
-                />
-              )}
-            </ErrorBoundary>
-          </main>
-        </LightboxProvider>
-      </LinkRouterContext.Provider>
+              )
+            ) : (
+              <EmptyState
+                onOpen={setDoc}
+                onPickRecent={setDocFromPath}
+                isDragOver={isDragOver}
+              />
+            )}
+          </ErrorBoundary>
+        </main>
+      </LightboxProvider>
       <StatusBar />
     </div>
   );
 }
+

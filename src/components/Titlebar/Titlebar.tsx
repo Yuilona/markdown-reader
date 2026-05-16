@@ -1,6 +1,8 @@
 import { minimize, toggleMaximize, closeWindow } from '../../lib/tauri';
 import { useTheme } from '../ThemeProvider/useTheme';
 import { nextMode } from '../ThemeProvider/themeCycle';
+import { useEditMode } from '../EditModeProvider/useEditMode';
+import { basename } from '../../lib/pathUtils';
 import type { ThemeMode } from '../../lib/settings';
 import styles from './Titlebar.module.css';
 
@@ -16,19 +18,68 @@ function tooltipFor(mode: ThemeMode): string {
   }
 }
 
-export function Titlebar() {
+interface TitlebarProps {
+  /** Current document path. `null` when on EmptyState. Used to render
+   *  the centered title (basename) + R-EDIT-5.3 dirty prefix.
+   *  Optional so tests that mount Titlebar standalone keep working. */
+  docPath?: string | null;
+}
+
+/**
+ * Win11-style custom titlebar.
+ *
+ * v1.0 PR-A additions (R-EDIT-3.2, R-EDIT-5.3):
+ *   - ✏️ / 👁 edit-mode toggle button to the LEFT of the theme button.
+ *     Clicking it cycles the EditModeProvider's mode (silent-save
+ *     applies when going edit → read with dirty buffer). Tooltip
+ *     advertises the Ctrl+E shortcut.
+ *   - The title text is no longer hard-coded "Markdown Reader". Now:
+ *       (dirty ? '● ' : '') + basename(docPath ?? 'Markdown Reader')
+ *     so the user has a constant visual signal that there are
+ *     unsaved changes.
+ */
+export function Titlebar({ docPath }: TitlebarProps = {}) {
   const { mode, setMode } = useTheme();
+  const { mode: editMode, toggleMode, dirty } = useEditMode();
 
   const handleThemeClick = () => {
     setMode(nextMode(mode));
   };
 
+  const handleEditClick = () => {
+    void toggleMode();
+  };
+
+  // Title computation. EmptyState has no doc → show app name. Dirty
+  // mark renders only when both: doc is open AND buffer differs from
+  // disk. The marker is a U+25CF BLACK CIRCLE — matches every common
+  // editor's "modified" affordance (VS Code, Sublime, etc.).
+  const baseTitle = docPath ? basename(docPath) : 'Markdown Reader';
+  const titleText = dirty ? `● ${baseTitle}` : baseTitle;
+
+  // Edit-mode tooltip + icon. When in edit mode the icon is an eye
+  // (👁 → "click to view / read") and vice versa.
+  const isEdit = editMode === 'edit';
+  const editTooltip = isEdit
+    ? '切换为阅读模式 (Ctrl+E)'
+    : '切换为编辑模式 (Ctrl+E)';
+
   return (
     <div className={styles.titlebar} data-tauri-drag-region data-print-hide>
       <div className={styles.title} data-tauri-drag-region>
-        Markdown Reader
+        {titleText}
       </div>
       <div className={styles.controls}>
+        <button
+          type="button"
+          className={`${styles.btn} ${styles.editBtn}`}
+          onClick={handleEditClick}
+          aria-label={editTooltip}
+          title={editTooltip}
+          aria-pressed={isEdit}
+        >
+          <EditModeIcon isEdit={isEdit} />
+        </button>
         <button
           type="button"
           className={`${styles.btn} ${styles.themeBtn}`}
@@ -86,6 +137,40 @@ export function Titlebar() {
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Edit/read mode glyph (R-EDIT-3.2).
+ *
+ * Read mode → pencil ✏️ (click to edit). Edit mode → eye (click to
+ * preview-only). Both rendered as inline SVG so they pick up
+ * currentColor and theme-flip correctly without an emoji font
+ * dependency.
+ */
+function EditModeIcon({ isEdit }: { isEdit: boolean }) {
+  if (isEdit) {
+    // Eye glyph: outlined eye with a center dot. "Click to view-only".
+    return (
+      <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          d="M1.5 8s2.5-4.5 6.5-4.5 6.5 4.5 6.5 4.5-2.5 4.5-6.5 4.5S1.5 8 1.5 8z"
+        />
+        <circle cx="8" cy="8" r="1.8" fill="currentColor" />
+      </svg>
+    );
+  }
+  // Pencil glyph: diagonal line + tip triangle. "Click to edit".
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+      <g fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z" />
+        <path d="M10.5 3.5l2 2" />
+      </g>
+    </svg>
   );
 }
 

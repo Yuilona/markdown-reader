@@ -1,0 +1,120 @@
+/* Confirm dialog modal (v1.0 PR-A, R-EDIT-5.4).
+ *
+ * z-index 10000 — above every other overlay in the app so the modal
+ * always sits on top. Backdrop is a soft scrim with blur to draw eye
+ * focus to the dialog body.
+ *
+ * Animation: small fade + scale-in matches the toast affordance for
+ * visual consistency. Keep durations under 200ms — modal interactions
+ * are short and a slow animation feels sluggish.
+ */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: backdropIn 120ms ease-out both;
+}
+
+@keyframes backdropIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.dialog {
+  min-width: 320px;
+  max-width: 480px;
+  background: var(--bg-elevated);
+  color: var(--fg-default);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.28);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: dialogIn 160ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+@keyframes dialogIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg-default);
+  line-height: 1.4;
+}
+
+.message {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fg-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 6px 14px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.btnSecondary {
+  background: transparent;
+  border-color: var(--border-default);
+  color: var(--fg-default);
+}
+
+.btnSecondary:hover {
+  background: var(--bg-hover);
+}
+
+.btnPrimary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.btnPrimary:hover {
+  filter: brightness(1.1);
+}
+
+.btnDanger {
+  background: var(--bg-error, #c42b1c);
+  border-color: var(--bg-error, #c42b1c);
+  color: #ffffff;
+}
+
+.btnDanger:hover {
+  filter: brightness(1.1);
+}

@@ -1,0 +1,67 @@
+/* Adaptive split-view (v1.0 PR-A, R-EDIT-2.1).
+ *
+ * The outer flex container flips its direction based on the
+ * orientation class set by SplitView.tsx. Both panes get `flex: 1 1
+ * 50%` so they share the available space evenly (PR-A fixed 50/50;
+ * PR-B will swap flex-basis for the persisted ratio).
+ *
+ * Min sizes (R-EDIT-2.2): 200px in the active axis. This is enforced
+ * even in PR-A because the layout will already need it once viewports
+ * narrow toward the 900px breakpoint — without a min, the right pane
+ * shrinks below the markdown's 820px column and the line lengths get
+ * silly.
+ */
+
+.split {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  background: var(--bg-canvas);
+  overflow: hidden;
+}
+
+.horizontal {
+  flex-direction: row;
+}
+
+.vertical {
+  flex-direction: column;
+}
+
+.pane {
+  flex: 1 1 50%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Horizontal: enforce min-width per pane so the preview doesn't
+ * collapse under its 820px column. */
+.horizontal .pane {
+  min-width: 200px;
+}
+
+/* Vertical: enforce min-height per pane for the same reason. */
+.vertical .pane {
+  min-height: 200px;
+}
+
+/* Gutter divider (4px). PR-A: static; PR-B: drag handle. The hover
+ * affordance is wired in PR-B too — for now, no cursor change. */
+.gutter {
+  flex: 0 0 4px;
+  background: var(--border-muted);
+  /* Subtle hover even in PR-A: helps users discover the divider
+   * exists once PR-B makes it draggable. */
+  transition: background-color 0.12s ease;
+}
+
+.horizontal .gutter {
+  cursor: default;
+}
+
+.vertical .gutter {
+  cursor: default;
+}

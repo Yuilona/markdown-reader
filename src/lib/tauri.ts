@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open } from '@tauri-apps/plugin-dialog';
-import { readTextFile } from '@tauri-apps/plugin-fs';
+import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 
 import { normalizePath, isMarkdownPath } from './pathUtils';
 import { pushRecent } from './recentFiles';
@@ -98,6 +98,42 @@ export async function loadDocument(
     // `setDocFromPath`'s null branch).
     logger.warn('failed to read file:', normalized, err);
     return null;
+  }
+}
+
+/**
+ * v1.0 (R-EDIT-5.1, PR-A): write the editor's buffer to disk at `path`.
+ *
+ * Thin wrapper around `writeTextFile` so EditModeProvider can stay
+ * Tauri-agnostic and we keep the "all FS I/O lives in tauri.ts" pattern
+ * the v0.1 codebase already follows for reads (`loadDocument`).
+ *
+ * The caller is responsible for:
+ *   - Dirty tracking (EditModeProvider holds the bufferText state)
+ *   - Toast on success / error (this layer only logs to the rolling
+ *     log file on failure, then rethrows so the caller can show the
+ *     toast in the same call site that owns user-facing UX text)
+ *
+ * Path semantics: the caller MUST pass an already-normalized absolute
+ * path (typically `doc.path`, which `loadDocument` normalized for us).
+ * We do NOT bump the recent list here — saving a file is not the same
+ * as opening it; the watcher will receive the modification event and
+ * the existing `skipRecent: true` reload path handles the consistency.
+ *
+ * The file watcher will fire its `file-changed` event for our own write
+ * — the v1.0 conflict-handling in useFileWatcher (R-EDIT-8) is the
+ * mechanism that prevents that from clobbering the buffer (the
+ * editor's bufferText already matches the disk by the time the watcher
+ * fires, so the dirty bit is false and the silent reload path is a
+ * no-op for the user).
+ */
+export async function saveDocument(path: string, text: string): Promise<void> {
+  const normalized = normalizePath(path);
+  try {
+    await writeTextFile(normalized, text);
+  } catch (err) {
+    logger.warn('failed to save file:', normalized, err);
+    throw err;
   }
 }
 

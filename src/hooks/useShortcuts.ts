@@ -23,12 +23,48 @@ interface UseShortcutsOptions {
   onToggleToc?: () => void;
   /** PR-9: Ctrl+W handler. Closes the current document and returns to
    *  the empty state (R13). No-op when nothing is open — App.tsx is
-   *  responsible for that detail; this hook just dispatches. */
+   *  responsible for that detail; this hook just dispatches.
+   *
+   *  v1.0 PR-A: App.tsx wraps this in the dirty-guard so the prompt
+   *  appears when there's an unsaved buffer. */
   onCloseDocument?: () => void;
   /** PR-9: Ctrl+R / F5 handler. Reloads the current document via the
    *  same `loadDocument(path, { skipRecent: true })` path that the
    *  file-watcher uses (R13, R2.6). No-op when nothing is open. */
   onReloadDocument?: () => void;
+  /** v1.0 PR-A (R-EDIT-3.2): Ctrl+E handler. Toggles read/edit mode. */
+  onToggleEditMode?: () => void;
+  /** v1.0 PR-A (R-EDIT-5.1): Ctrl+S handler. Saves the editor buffer
+   *  to disk (no-op when buffer is clean / no doc). */
+  onSaveDocument?: () => void;
+}
+
+/** Test whether a KeyboardEvent originated inside CodeMirror 6's editor
+ *  DOM. CM6 mounts a root with class `cm-editor` (and never reuses that
+ *  class outside of CM6). Walking up from the event target lets us
+ *  defer ownership of certain shortcuts (Ctrl+F search panel, Ctrl+G
+ *  find-next) to CM6 when the focus is inside the editor.
+ *
+ *  Why this matters for PR-A: CM6's basicSetup binds `Mod-f` to the
+ *  search panel (R-EDIT-2.5). Our global Ctrl+F handler opens the
+ *  v0.1 SearchBar. Without this gate, both would fire — and the
+ *  global handler runs first because keydown bubbles from the
+ *  innermost element outward. preventDefault'ing on the way out would
+ *  prevent CM6 from ever receiving the event.
+ *
+ *  Implementation note: we use `Node` membership rather than `Element`
+ *  because text-node targets show up occasionally in selection-driven
+ *  events. The `.closest('.cm-editor')` form is safe on Element only,
+ *  so we manually walk parentNode chain. */
+function isInCodeMirror(target: EventTarget | null): boolean {
+  let cur = target as Node | null;
+  while (cur) {
+    if (cur instanceof Element && cur.classList.contains('cm-editor')) {
+      return true;
+    }
+    cur = cur.parentNode;
+  }
+  return false;
 }
 
 /**
@@ -36,16 +72,21 @@ interface UseShortcutsOptions {
  *
  *   - `Ctrl+O` opens the native file dialog (R13).
  *   - `Ctrl+T` cycles the theme (R13, PR-6).
- *   - `Ctrl+F` opens the search bar (R13, PR-7).
+ *   - `Ctrl+F` opens the search bar (R13, PR-7). v1.0: skipped when
+ *     focus is inside CM6 (CM6 owns Mod-f → opens its search panel).
  *   - `Ctrl+\` toggles the TOC sidebar (R13, PR-7).
  *   - `Ctrl+P` opens the system print dialog (R13, R11.1, PR-8).
- *   - `Ctrl+W` closes the current file (R13, PR-9).
- *   - `Ctrl+Q` quits the app (R13, PR-9).
+ *   - `Ctrl+W` closes the current file (R13, PR-9; v1.0: dirty-guarded
+ *     by the caller).
+ *   - `Ctrl+Q` quits the app (R13, PR-9; v1.0: dirty-guarded by the
+ *     caller).
  *   - `Ctrl+R` / `F5` reloads the current file (R13, PR-9).
  *   - `Ctrl+=` / `Ctrl++` page-zoom +10% (R13, R10.5, PR-9).
  *   - `Ctrl+-` page-zoom -10% (R13, R10.5, PR-9).
  *   - `Ctrl+0` page-zoom reset 100% (R13, R10.5, PR-9).
  *   - `F11` toggles window fullscreen (R13, PR-9).
+ *   - `Ctrl+E` toggle edit mode (v1.0 PR-A, R-EDIT-3.2).
+ *   - `Ctrl+S` save current buffer to disk (v1.0 PR-A, R-EDIT-5.1).
  *
  * PR-5a: `openFileDialog` now funnels through `loadDocument`, so the
  * recent-list is updated automatically.
@@ -66,17 +107,20 @@ interface UseShortcutsOptions {
  * provider tree in App.tsx wraps ThemeProvider → PageZoomProvider →
  * ... → the consumer of useShortcuts.
  *
+ * v1.0 PR-A: Ctrl+E + Ctrl+S work even when focus is inside CM6 (we
+ * want save-from-editor to be the primary save flow). Ctrl+F, Ctrl+G,
+ * F3 are passed THROUGH to CM6 when focus is in the editor so CM6's
+ * own search panel takes over.
+ *
  * Ctrl+= note: on Windows the unmodified `=` key produces `=`, and
  * Shift+`=` produces `+`. We accept both `event.key === '='` AND
  * `event.key === '+'` so users with either physical-key habit
  * trigger the same zoom-in path.
  *
  * Input-focus gating: shortcuts apply globally and do NOT check whether
- * a text input has focus. The only meaningful overlap is Ctrl+W in the
- * SearchBar input (browsers no-op it; we hijack it to close the file —
- * matches the user expectation of "quick close" since SearchBar's Esc
- * is also bound). Other shortcuts (Ctrl+0, Ctrl+R, F5, F11) are
- * unaffected by input focus on Windows.
+ * a text input has focus EXCEPT for Ctrl+F-and-friends which yield to
+ * CM6. Other shortcuts (Ctrl+0, Ctrl+R, F5, F11) are unaffected by
+ * input focus on Windows.
  */
 export function useShortcuts(options: UseShortcutsOptions = {}): void {
   const {
@@ -85,6 +129,8 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
     onToggleToc,
     onCloseDocument,
     onReloadDocument,
+    onToggleEditMode,
+    onSaveDocument,
   } = options;
   const { mode, setMode } = useTheme();
   const { zoomIn, zoomOut, resetZoom } = usePageZoom();
@@ -105,14 +151,38 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
         setMode(nextMode(mode));
         return;
       }
-      // Ctrl+F opens the search bar (R13, PR-7). We use `key === 'f'`
-      // so Shift+Ctrl+F (a hypothetical future "find all docs" shortcut)
-      // doesn't accidentally trip the same path — the modifier-strict
-      // gate above already requires no Shift.
+      // Ctrl+E toggles edit/read mode (v1.0 PR-A, R-EDIT-3.2). Fires
+      // even when focus is inside CM6 — there's no CM6 default binding
+      // for Mod-e, so we don't conflict.
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        if (onToggleEditMode) onToggleEditMode();
+        return;
+      }
+      // Ctrl+S saves the editor buffer (v1.0 PR-A, R-EDIT-5.1). Fires
+      // even when focus is inside CM6 — CM6's default has no Mod-s
+      // binding (the browser would otherwise open the Save Page As
+      // dialog, which preventDefault below suppresses).
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (onSaveDocument) onSaveDocument();
+        return;
+      }
+      // Ctrl+F opens the search bar (R13, PR-7). v1.0 PR-A: when focus
+      // is inside CM6's `.cm-editor` DOM, do nothing — CM6's own
+      // Mod-f binding (from basicSetup's searchKeymap) opens its
+      // search panel (R-EDIT-2.5). We don't preventDefault either, so
+      // the event reaches CM6's listener untouched.
       if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+        if (isInCodeMirror(e.target)) return;
         e.preventDefault();
         if (onOpenSearch) onOpenSearch();
         return;
+      }
+      // Ctrl+G / F3 — find-next inside CM6. Same yield rule: when focus
+      // is in CM6, let it handle the event natively.
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'g') {
+        if (isInCodeMirror(e.target)) return;
       }
       // Ctrl+\ toggles TOC (R13, PR-7). The key string for backslash is
       // literally '\' on every keyboard layout that has one — Windows
@@ -132,11 +202,8 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
         window.print();
         return;
       }
-      // Ctrl+W closes the current file (R13, PR-9). App.tsx maps this to
-      // `setDoc(null)` which drops the user back to EmptyState. We
-      // still fire even when nothing is open — the App handler is
-      // idempotent and `setDoc(null)` on an already-null state is a
-      // React no-op.
+      // Ctrl+W closes the current file (R13, PR-9). App.tsx wraps the
+      // handler with the dirty-guard in v1.0; we just dispatch.
       if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'w') {
         e.preventDefault();
         if (onCloseDocument) onCloseDocument();
@@ -146,6 +213,14 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
       // — the app is single-window so closing terminates the process.
       // Errors are caught + logged; we never let a failed quit attempt
       // bubble up as an unhandled rejection.
+      //
+      // v1.0 PR-A: when a dirty-aware quit is needed, the caller wraps
+      // this with their own guarded handler. We don't gate inside this
+      // hook because the guard flow is async + interactive, which
+      // doesn't compose with the `quitApp()` direct-call pattern.
+      // App.tsx is responsible for replacing this code path with a
+      // guarded version if the caller wants one — see App.tsx's
+      // onCloseRequested + Ctrl+W wiring for the pattern.
       if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'q') {
         e.preventDefault();
         try {
@@ -215,6 +290,8 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
     onToggleToc,
     onCloseDocument,
     onReloadDocument,
+    onToggleEditMode,
+    onSaveDocument,
     mode,
     setMode,
     zoomIn,

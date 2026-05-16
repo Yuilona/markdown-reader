@@ -5,7 +5,10 @@
  * area above it. Monospace font (small, muted) reads as "system
  * information" — borrowed from VS Code / browser dev tools.
  *
- * Layout: row flex, single text cell that ellipsizes long URLs.
+ * Layout: row flex.
+ *   - LEFT cell `.text`: hover URL, ellipsis-truncated.
+ *   - RIGHT cell `.editorCell` (v1.0 PR-A, R-EDIT-2.6): edit-mode
+ *     info — only mounted when in edit mode.
  */
 
 .bar {
@@ -23,12 +26,46 @@
   -webkit-user-select: none;
   overflow: hidden;
   white-space: nowrap;
+  gap: 12px;
 }
 
 .text {
   display: block;
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* v1.0 PR-A: edit-mode info cluster — sits flush to the right edge.
+ * `flex: 0 0 auto` so it takes only the space it needs and never
+ * shrinks the hover-URL cell out of existence. */
+.editorCell {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.cell {
+  display: inline-block;
+  color: var(--fg-muted);
+}
+
+.cellSep {
+  color: var(--fg-muted);
+  opacity: 0.5;
+}
+
+/* Dirty indicator picks up the accent color so the user notices it
+ * immediately. Clean state stays muted — "no news is good news". */
+.cellDirty {
+  color: var(--fg-default);
+  font-weight: 600;
+}
+
+.cellClean {
+  color: var(--fg-muted);
 }

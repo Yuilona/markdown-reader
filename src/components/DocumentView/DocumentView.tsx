@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import Markdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import type { PluggableList } from 'unified';
@@ -67,6 +67,13 @@ interface DocumentViewProps {
   /** PR-7: ref to the SearchBar's input field, forwarded from App.tsx so
    *  the Ctrl+F handler can re-focus + select on a second open. */
   searchInputRef: RefObject<HTMLInputElement>;
+  /** v1.0 PR-A (R-EDIT-4): live editor buffer to render INSTEAD of
+   *  doc.text. When present, the preview shows the user's edits in
+   *  real-time. We debounce the value inside DocumentView (500ms) so
+   *  typing doesn't trigger every-keystroke re-runs of the heavy
+   *  remark/rehype pipeline. When undefined / null, behavior is
+   *  identical to v0.1 (preview shows doc.text). */
+  editText?: string | null;
 }
 
 /**
@@ -115,12 +122,31 @@ export function DocumentView({
   searchOpen,
   onCloseSearch,
   searchInputRef,
+  editText,
 }: DocumentViewProps) {
+  // v1.0 PR-A (R-EDIT-4.1): when `editText` is provided (edit mode),
+  // we render the buffer text instead of doc.text. Debounce by 500ms
+  // so a typing burst only triggers one trip through the heavy
+  // remark/rehype/Shiki pipeline.
+  //
+  // Source-of-truth selection:
+  //   - editText === undefined → preview = doc.text (read mode / v0.1
+  //     behavior).
+  //   - editText === '' or any string → preview = editText (edit mode;
+  //     the editor IS the source).
+  //
+  // When the doc swaps, editText immediately resets to the new doc's
+  // text via EditModeProvider's reset effect, so the debounce here
+  // doesn't need any special "doc change → flush immediately" handling.
+  const editTextProvided = editText !== undefined && editText !== null;
+  const sourceText = editTextProvided ? (editText as string) : doc.text;
+  const debouncedSourceText = useDebouncedValue(sourceText, 500);
+
   const { frontmatterRaw, body } = useMemo(() => {
-    const split = splitFrontmatter(doc.text);
+    const split = splitFrontmatter(debouncedSourceText);
     if (split) return { frontmatterRaw: split.raw, body: split.body };
-    return { frontmatterRaw: '', body: doc.text };
-  }, [doc.text]);
+    return { frontmatterRaw: '', body: debouncedSourceText };
+  }, [debouncedSourceText]);
 
   // Scroll container ref — owned here, shared with the scroll-memory hook,
   // the TOC observer's `root`, and the SearchBar (indirectly, via the
@@ -295,12 +321,16 @@ export function DocumentView({
 
   // Re-extraction trigger for TOC + re-walk trigger for SearchBar. We
   // need a value that changes whenever the article DOM has been
-  // replaced: doc swap (`doc.path`) OR watcher reload (`doc.text`).
+  // replaced: doc swap (`doc.path`) OR watcher reload (`doc.text`) OR
+  // edit-mode buffer changes that have flushed past the debounce
+  // (`debouncedSourceText`).
   //
-  // The dep array `[doc.path, doc.text]` already covers both cases:
+  // The dep array `[doc.path, debouncedSourceText]` covers all three:
   // `loadDocument` always returns a fresh `LoadedDocument`, so on every
-  // reload the `doc.text` reference is new — even when the file
-  // contents happen to be identical. Using a monotonic counter (bumped
+  // reload the `doc.text` reference is new — and our source-of-truth
+  // (`debouncedSourceText`) tracks that change because edit mode is
+  // off (or because the EditModeProvider's reset effect already swapped
+  // the buffer to the new doc.text). Using a monotonic counter (bumped
   // each time the memo re-runs) produces a small, distinct string for
   // every load, which downstream `useEffect`s key off cheaply. This
   // sidesteps the "identical length but different content" trap that a
@@ -311,7 +341,7 @@ export function DocumentView({
       versionCounterRef.current += 1;
       return `${doc.path}::${versionCounterRef.current}`;
     },
-    [doc.path, doc.text],
+    [doc.path, debouncedSourceText],
   );
 
   return (
@@ -328,15 +358,25 @@ export function DocumentView({
           </Markdown>
         </article>
       </div>
-      <Toc
-        articleRef={articleRef}
-        scrollRef={scrollRef}
-        versionKey={tocVersionKey}
-        visible={tocVisible}
-        onClose={onToggleToc}
-        onOpen={onToggleToc}
-        searchOpen={searchOpen}
-      />
+      {/* v1.0 PR-A (R-EDIT-2.4 / R-EDIT-9.7): when in edit mode the
+       *  caller passes editText AND signals tocVisible=false. We
+       *  COMPLETELY omit the Toc subtree (no floating toggle either) —
+       *  the split-view's right pane is narrower than the standalone
+       *  reader so even the small toggle button competes with the
+       *  preview's right margin. This is intentionally heavier-handed
+       *  than the v0.1 "click ✕ to hide" path; the persisted
+       *  showTocByDefault is untouched and re-applies on mode flip. */}
+      {!editTextProvided && (
+        <Toc
+          articleRef={articleRef}
+          scrollRef={scrollRef}
+          versionKey={tocVersionKey}
+          visible={tocVisible}
+          onClose={onToggleToc}
+          onOpen={onToggleToc}
+          searchOpen={searchOpen}
+        />
+      )}
       <SearchBar
         articleRef={articleRef}
         open={searchOpen}
@@ -505,4 +545,27 @@ export function resolveImageSrc(src: string | undefined, docDir: string): string
   }
 
   return convertFileSrc(absolute);
+}
+
+/**
+ * Debounce a fast-changing string value (v1.0 PR-A, R-EDIT-4.1).
+ *
+ * Returns a value that lags the input by `delayMs`. While the input
+ * keeps changing within the window, the returned value stays stable —
+ * so a typing burst in CM6 (one new value per keystroke) only fires
+ * the markdown pipeline once after the user pauses.
+ *
+ * The initial render returns `value` immediately (no delay) so the
+ * first paint matches the source. This is what we want for the
+ * doc-open path: we don't want a 500ms blank flash on every file open.
+ */
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState<T>(value);
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      setDebounced(value);
+    }, delayMs);
+    return () => window.clearTimeout(id);
+  }, [value, delayMs]);
+  return debounced;
 }

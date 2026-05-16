@@ -1,0 +1,44 @@
+/* CodeMirror 6 wrapper (v1.0 PR-A, R-EDIT-1).
+ *
+ * Frame: fills the split-pane left half. The `<CodeMirror>` component
+ * paints inside `.cm-editor` (which has its own theme + sizing layer);
+ * we just give it a flex container.
+ *
+ * The PR-A default theme is the CM6 vanilla light theme. PR-B swaps in
+ * GitHub light/dark via a custom EditorView.theme extension + remount
+ * on theme change.
+ */
+
+.editor {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Background matches the canvas so the CM6 padding doesn't show a
+   * mismatched stripe against the surrounding split-pane chrome. */
+  background: var(--bg-canvas);
+}
+
+/* Make the inner .cm-editor element fill the wrapper. @uiw/react-codemirror
+ * accepts height props, but inheriting via flex is more robust against
+ * future panel resize work in PR-B. The :global() escape is needed because
+ * `.cm-editor` is a class CM6 owns, not a CSS module local. */
+.editor :global(.cm-editor) {
+  height: 100%;
+  width: 100%;
+  font-family: var(--font-stack-code);
+  font-size: 13px;
+  outline: none;
+}
+
+.editor :global(.cm-scroller) {
+  font-family: var(--font-stack-code);
+}
+
+/* CM6's default focus ring is a 2px-wide accent that clashes with our
+ * subtle outline style — kill it. The editor itself signals focus via
+ * cursor blink. */
+.editor :global(.cm-editor.cm-focused) {
+  outline: none;
+}
