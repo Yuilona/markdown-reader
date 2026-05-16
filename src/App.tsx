@@ -4,6 +4,7 @@ import { EmptyState } from './components/EmptyState/EmptyState';
 import { DocumentView } from './components/DocumentView/DocumentView';
 import { LightboxProvider } from './components/Lightbox/LightboxContext';
 import { ThemeProvider } from './components/ThemeProvider/ThemeProvider';
+import { PageZoomProvider } from './components/PageZoom/PageZoomProvider';
 import { ToastProvider } from './components/Toast/ToastProvider';
 import { useToast } from './components/Toast/useToast';
 import { ContextMenuProvider } from './components/ContextMenu/ContextMenuContext';
@@ -38,20 +39,21 @@ const DROP_ERROR_TEXT = '无法打开：仅支持 .md / .markdown 文件';
  * Ctrl+T handler) can call useTheme(). The actual app body lives in
  * <AppContent> to keep the provider boundary clean.
  *
- * PR-8 provider nesting (outer → inner):
+ * PR-9 provider nesting (outer → inner):
  *   ThemeProvider
- *     ToastProvider              ← exposes useToast()
- *       ContextMenuProvider      ← exposes useContextMenu()
- *         StatusBarProvider      ← exposes useStatusBar()
- *           AppContent
- *             Titlebar           (OUTSIDE the error boundary so the
+ *     PageZoomProvider           ← exposes usePageZoom() (R10.5, R13)
+ *       ToastProvider            ← exposes useToast()
+ *         ContextMenuProvider    ← exposes useContextMenu()
+ *           StatusBarProvider    ← exposes useStatusBar()
+ *             AppContent
+ *               Titlebar         (OUTSIDE the error boundary so the
  *                                 user can always close the window)
- *             LightboxProvider
- *               LinkRouterProvider
- *                 main
- *                   ErrorBoundary
- *                     DocumentView / EmptyState
- *             StatusBar          (mounted after main so it sits at the
+ *               LightboxProvider
+ *                 LinkRouterProvider
+ *                   main
+ *                     ErrorBoundary
+ *                       DocumentView / EmptyState
+ *               StatusBar        (mounted after main so it sits at the
  *                                 bottom of `.app-root`)
  *
  * The error boundary intentionally wraps ONLY the document tree. A
@@ -61,6 +63,13 @@ const DROP_ERROR_TEXT = '无法打开：仅支持 .md / .markdown 文件';
  * We also fire `loadUserCss()` here (not inside AppContent) so the
  * read-once user.css inject runs exactly once for the app lifetime,
  * regardless of any future remount of the body.
+ *
+ * PageZoomProvider sits between ThemeProvider and ToastProvider because
+ * (a) useShortcuts (mounted inside AppContent) needs both providers in
+ * scope, and (b) page zoom is a "chrome-level" concern alongside theme
+ * — both are persisted in settings.json and applied to the root DOM, so
+ * grouping them at the top of the provider tree keeps the persistence
+ * round-trip pattern symmetric.
  */
 export default function App() {
   useEffect(() => {
@@ -69,13 +78,15 @@ export default function App() {
 
   return (
     <ThemeProvider>
-      <ToastProvider>
-        <ContextMenuProvider>
-          <StatusBarProvider>
-            <AppContent />
-          </StatusBarProvider>
-        </ContextMenuProvider>
-      </ToastProvider>
+      <PageZoomProvider>
+        <ToastProvider>
+          <ContextMenuProvider>
+            <StatusBarProvider>
+              <AppContent />
+            </StatusBarProvider>
+          </ContextMenuProvider>
+        </ToastProvider>
+      </PageZoomProvider>
     </ThemeProvider>
   );
 }
@@ -217,13 +228,43 @@ function AppContent() {
     });
   }, []);
 
-  // Wire Ctrl+O / Ctrl+T / Ctrl+F / Ctrl+\ / Ctrl+P. The shortcut returns
+  // PR-9: Ctrl+W handler — drop back to EmptyState. setDoc(null) on an
+  // already-null state is a React no-op (referential equality skips the
+  // re-render), so we don't need an "is anything open?" guard.
+  const handleCloseDocument = useCallback(() => {
+    setDoc(null);
+  }, []);
+
+  // PR-9: Ctrl+R / F5 handler — re-read the current file via the same
+  // path the file-watcher uses (skipRecent: true so a manual reload
+  // doesn't bump the recent-list). DocumentView keeps its scroll
+  // container mounted because we only swap doc.text (path is unchanged),
+  // which means useScrollMemory's restore path doesn't re-run and the
+  // current scroll position survives the reload naturally — same
+  // semantics as the file-watcher auto-reload (R2.6).
+  const handleReloadDocument = useCallback(() => {
+    const path = doc?.path;
+    if (!path) return;
+    void (async () => {
+      const reloaded = await loadDocument(path, { skipRecent: true });
+      if (reloaded) {
+        setDoc(reloaded);
+      } else {
+        showError('重新加载失败');
+      }
+    })();
+  }, [doc, showError]);
+
+  // Wire Ctrl+O / Ctrl+T / Ctrl+F / Ctrl+\ / Ctrl+P / Ctrl+W / Ctrl+Q /
+  // Ctrl+R / F5 / Ctrl+= / Ctrl+- / Ctrl+0 / F11. The shortcut returns
   // a LoadedDocument for Ctrl+O (recent already updated by
   // openFileDialog → loadDocument); we just promote it.
   useShortcuts({
     onOpenDocument: setDoc,
     onOpenSearch: handleOpenSearch,
     onToggleToc: handleToggleToc,
+    onCloseDocument: handleCloseDocument,
+    onReloadDocument: handleReloadDocument,
   });
 
   // Wire drag-drop at the webview level.

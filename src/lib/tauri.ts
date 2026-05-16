@@ -29,6 +29,26 @@ export const toggleMaximize = (): Promise<void> => getCurrentWindow().toggleMaxi
 
 export const closeWindow = (): Promise<void> => getCurrentWindow().close();
 
+/**
+ * PR-9: Ctrl+Q quit alias. Same underlying call as `closeWindow` (the app
+ * is a single window so closing it terminates the process). Named
+ * separately so the call site reads naturally — `quitApp()` for a Ctrl+Q
+ * handler, `closeWindow()` for the titlebar ✕ button.
+ */
+export const quitApp = (): Promise<void> => getCurrentWindow().close();
+
+/**
+ * PR-9: F11 fullscreen toggle (R13). Reads the current fullscreen state
+ * and flips it. Errors are surfaced to the caller (useShortcuts logs +
+ * swallows them) — a transient toggle failure is not worth interrupting
+ * the user with a toast.
+ */
+export const toggleFullscreen = async (): Promise<void> => {
+  const win = getCurrentWindow();
+  const current = await win.isFullscreen();
+  await win.setFullscreen(!current);
+};
+
 export const getDataDir = (): Promise<string> => invoke<string>('get_data_dir');
 
 /** A loaded markdown document: absolute path on disk + raw text. */
