@@ -23,7 +23,12 @@
 
 .pre {
   margin: 0;
-  padding: 14px 16px;
+  /* Top padding reserves space for the floating toolbar (~28px tall at
+   * top: 6px) so the first code line never disappears behind the Copy
+   * button. Without this reserve, long single-line code blocks (verified
+   * with the showcase's "LONG line" sample) would render the Copy
+   * button over the code text. */
+  padding: 36px 16px 14px 16px;
   border-radius: 6px;
   overflow-x: auto;
   font-family: var(--font-stack-code);
