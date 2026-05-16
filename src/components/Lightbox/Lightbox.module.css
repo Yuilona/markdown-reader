@@ -128,3 +128,16 @@
   outline: 2px solid #ffffff;
   outline-offset: 2px;
 }
+
+/* PR-8: belt-and-braces print hide for the lightbox.
+ *
+ * The print.css global rule hides anything with role=dialog aria-modal,
+ * which covers the open lightbox. But the portal-rendered backdrop is
+ * mounted at document.body — a separate per-module rule here means a
+ * future portal refactor can't accidentally let the lightbox bleed
+ * into the printed page. */
+@media print {
+  .backdrop {
+    display: none !important;
+  }
+}

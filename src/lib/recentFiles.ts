@@ -3,6 +3,7 @@ import { exists, remove } from '@tauri-apps/plugin-fs';
 import { getDataDir } from './tauri';
 import { normalizePath, pathsEqual } from './pathUtils';
 import { atomicWriteJson, readJson } from './persistJson';
+import * as logger from './logger';
 
 /**
  * Recent-files persistence (R10.3).
@@ -96,8 +97,9 @@ export async function pushRecent(absolutePath: string): Promise<RecentList> {
   try {
     await atomicWriteJson(FILE_NAME, next);
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn('[markdown-reader] failed to write recent.json:', err);
+    // Console mirror + rolling log file (PR-8). logger.warn writes to
+    // console.warn AND appends a line to data/logs/app.log.
+    logger.warn('failed to write recent.json (push):', err);
   }
   return next;
 }
@@ -115,8 +117,7 @@ export async function removeRecent(absolutePath: string): Promise<RecentList> {
   try {
     await atomicWriteJson(FILE_NAME, next);
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn('[markdown-reader] failed to write recent.json:', err);
+    logger.warn('failed to write recent.json (remove):', err);
   }
   return next;
 }

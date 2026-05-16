@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type RefObject } from 'react';
 import Markdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import type { PluggableList } from 'unified';
@@ -11,6 +11,10 @@ import { dirname, normalizePath } from '../../lib/pathUtils';
 import { handleLinkClick, useLinkRouter } from '../../lib/linkRouter';
 import type { LoadedDocument } from '../../lib/tauri';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
+import { useContextMenu, type ContextMenuItem } from '../ContextMenu/ContextMenuContext';
+import { useStatusBar } from '../StatusBar/StatusBarContext';
+import { useToast } from '../Toast/useToast';
+import { openLinkInBrowser, copyLinkAddress, copyImageToClipboard, saveImageToDisk, openImageInSystem } from './documentActions';
 
 // Vendor CSS pulled directly from node_modules — no copy in src/styles
 // per the PR-2 brief. Vite resolves these at bundle time.
@@ -139,6 +143,12 @@ export function DocumentView({
   // on every parent render.
   const { open, isOpen: lightboxOpen } = useLightbox();
   const linkRouter = useLinkRouter();
+  // PR-8: context-menu + status-bar + toast contexts. All three are
+  // stable in identity (their providers memoize the value object) so
+  // including them in the buildComponents memo's dep array is cheap.
+  const ctxMenu = useContextMenu();
+  const statusBar = useStatusBar();
+  const toast = useToast();
   const docDir = useMemo(() => dirname(doc.path), [doc.path]);
   const docPath = doc.path;
 
@@ -157,10 +167,131 @@ export function DocumentView({
     [linkRouter, docPath],
   );
 
-  const components = useMemo<Components>(
-    () => buildComponents({ openLightbox: open, onLinkClick, docDir }),
-    [open, onLinkClick, docDir],
+  // PR-8: right-click on a link (R7.7) — show context menu with "复制
+  //链接地址" and "在浏览器中打开". The menu suppresses the browser's
+  // default contextmenu via the event preventDefault.
+  const onLinkContextMenu = useCallback(
+    (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+      event.preventDefault();
+      const items: ContextMenuItem[] = [
+        {
+          label: '复制链接地址',
+          onClick: () => void copyLinkAddress(href, toast),
+        },
+        {
+          label: '在浏览器中打开',
+          onClick: () => void openLinkInBrowser(href, toast),
+        },
+      ];
+      ctxMenu.open(event.clientX, event.clientY, items);
+    },
+    [ctxMenu, toast],
   );
+
+  // PR-8: right-click on an image (R6.7, R14.5).
+  const onImageContextMenu = useCallback(
+    (
+      event: React.MouseEvent<HTMLElement>,
+      resolvedSrc: string | undefined,
+      altText: string,
+      originalSrc: string | undefined,
+    ) => {
+      // No resolved src → no useful actions (placeholder doesn't have a
+      // copyable URL). Let the browser show its default menu.
+      if (!resolvedSrc) return;
+      event.preventDefault();
+      const filenameGuess =
+        originalSrc?.split(/[/\\]/).pop()?.split('?')[0] ||
+        (altText ? `${altText}.png` : 'image.png');
+      const items: ContextMenuItem[] = [
+        {
+          label: '复制图片',
+          onClick: () => void copyImageToClipboard(resolvedSrc, toast),
+        },
+        {
+          label: '另存为…',
+          onClick: () => void saveImageToDisk(resolvedSrc, filenameGuess, toast),
+        },
+        {
+          label: '在系统中打开',
+          onClick: () => void openImageInSystem(resolvedSrc, toast),
+        },
+      ];
+      ctxMenu.open(event.clientX, event.clientY, items);
+    },
+    [ctxMenu, toast],
+  );
+
+  const components = useMemo<Components>(
+    () => buildComponents({
+      openLightbox: open,
+      onLinkClick,
+      onLinkContextMenu,
+      onImageContextMenu,
+      docDir,
+    }),
+    [open, onLinkClick, onLinkContextMenu, onImageContextMenu, docDir],
+  );
+
+  // PR-8: delegated mouseover/mouseout for status-bar URL hover (R7.6).
+  // Attaching a single listener on the article (rather than per-<a>)
+  // avoids:
+  //   - blowing up the components factory's memoization
+  //   - per-link React re-renders for hover state
+  //
+  // We walk up from event.target until we find an <a> with an href, then
+  // call setStatusText(href). On mouseout (without an enter into another
+  // anchor), clear via setStatusText(null).
+  //
+  // Dep array uses the STABLE `setStatusText` (the context's useCallback-
+  // wrapped setter) NOT the whole `statusBar` value object. The value
+  // object's identity changes on every `text` update (i.e. every hover),
+  // which would otherwise re-bind the listener on every hover.
+  const setStatusText = statusBar.setText;
+  useEffect(() => {
+    const article = articleRef.current;
+    if (!article) return;
+    const findAnchor = (el: EventTarget | null): HTMLAnchorElement | null => {
+      let cur = el as Node | null;
+      while (cur && cur !== article) {
+        if (cur instanceof HTMLAnchorElement && cur.getAttribute('href')) {
+          return cur;
+        }
+        cur = cur.parentNode;
+      }
+      return null;
+    };
+    const onOver = (e: MouseEvent) => {
+      const anchor = findAnchor(e.target);
+      if (anchor) {
+        // Display the original href (not the resolved URL) — that's what
+        // the user clicks and what makes sense as "anti-phishing"
+        // information per R7.6.
+        setStatusText(anchor.getAttribute('href'));
+      }
+    };
+    const onOut = (e: MouseEvent) => {
+      // When the mouse moves from one anchor to another, relatedTarget
+      // will be inside the new anchor — let onOver handle the swap.
+      // Only clear when leaving an anchor for non-anchor space.
+      const fromAnchor = findAnchor(e.target);
+      const toAnchor = findAnchor(e.relatedTarget);
+      if (fromAnchor && !toAnchor) {
+        setStatusText(null);
+      }
+    };
+    article.addEventListener('mouseover', onOver);
+    article.addEventListener('mouseout', onOut);
+    return () => {
+      article.removeEventListener('mouseover', onOver);
+      article.removeEventListener('mouseout', onOut);
+      // Defensive clear so a stray "last link" text doesn't survive
+      // unmounting the article.
+      setStatusText(null);
+    };
+    // Re-bind whenever the doc swaps — articleRef points at a new DOM
+    // element each time, and we want our listener on the fresh one.
+  }, [doc.path, doc.text, setStatusText]);
 
   // Re-extraction trigger for TOC + re-walk trigger for SearchBar. We
   // need a value that changes whenever the article DOM has been
@@ -221,6 +352,15 @@ export function DocumentView({
 interface BuildComponentsOptions {
   openLightbox: (c: import('../Lightbox/LightboxContext').LightboxContent) => void;
   onLinkClick: (event: React.MouseEvent<HTMLAnchorElement>, href: string) => void;
+  /** PR-8: link right-click context menu (R7.7). */
+  onLinkContextMenu: (event: React.MouseEvent<HTMLAnchorElement>, href: string) => void;
+  /** PR-8: image right-click context menu (R6.7, R14.5). */
+  onImageContextMenu: (
+    event: React.MouseEvent<HTMLElement>,
+    resolvedSrc: string | undefined,
+    altText: string,
+    originalSrc: string | undefined,
+  ) => void;
   /** Directory of the current document (for resolving relative image paths). */
   docDir: string;
 }
@@ -230,7 +370,7 @@ interface BuildComponentsOptions {
  * identity per memoized factory call.
  */
 function buildComponents(opts: BuildComponentsOptions): Components {
-  const { openLightbox, onLinkClick, docDir } = opts;
+  const { openLightbox, onLinkClick, onLinkContextMenu, onImageContextMenu, docDir } = opts;
   return {
     pre: ({ children, node }) => {
       // Mermaid blocks are pre-tagged by `rehypeMermaidPretag` with a
@@ -269,7 +409,12 @@ function buildComponents(opts: BuildComponentsOptions): Components {
         return <a {...rest}>{children}</a>;
       }
       return (
-        <a href={href} {...rest} onClick={(e) => onLinkClick(e, href)}>
+        <a
+          href={href}
+          {...rest}
+          onClick={(e) => onLinkClick(e, href)}
+          onContextMenu={(e) => onLinkContextMenu(e, href)}
+        >
           {children}
         </a>
       );
@@ -286,12 +431,16 @@ function buildComponents(opts: BuildComponentsOptions): Components {
       const onClick = resolvedSrc
         ? () => openLightbox({ kind: 'image', src: resolvedSrc, alt: altText })
         : undefined;
+      const onContextMenu = (event: React.MouseEvent<HTMLElement>) => {
+        onImageContextMenu(event, resolvedSrc, altText, rawSrc);
+      };
       return (
         <ImageWithFallback
           resolvedSrc={resolvedSrc}
           alt={altText}
           originalSrc={rawSrc}
           onClick={onClick}
+          onContextMenu={onContextMenu}
         />
       );
     },

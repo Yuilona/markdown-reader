@@ -7,6 +7,8 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
+import * as logger from '../../lib/logger';
+import { useToast } from '../Toast/useToast';
 import styles from './CodeBlock.module.css';
 
 interface CodeBlockProps {
@@ -29,6 +31,8 @@ interface CodeBlockProps {
  */
 export function CodeBlock({ children }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
+  // PR-8: route copy failures through the toast system (R12.5, R12.8).
+  const toast = useToast();
   // Track the pending revert timer so a quick unmount (e.g. user
   // closes the document within the 1.5s flash window) cancels it
   // before React would warn about a state update on an unmounted node.
@@ -64,9 +68,13 @@ export function CodeBlock({ children }: CodeBlockProps) {
         setCopied(false);
       }, 1500);
     } catch (err) {
-      // PR-8 will route this to a toast; for PR-2 we just log.
-      // eslint-disable-next-line no-console
-      console.warn('[markdown-reader] copy failed:', err);
+      // PR-8: surface to a toast (R12.5/R12.8) AND log via the rolling
+      // logger so the rolling app.log carries the stack. The original
+      // console.warn used to live here too — logger.warn mirrors to
+      // console.warn under the hood, so behaviour is preserved.
+      const detail = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      logger.warn('Code-block copy failed:', err);
+      toast.show('复制失败', { variant: 'error', details: detail });
     }
   };
 

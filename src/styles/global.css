@@ -47,40 +47,15 @@ button {
   min-height: 0;
   overflow: auto;
   background-color: var(--bg-canvas);
-  position: relative; /* anchor for the drop-error banner */
+  position: relative;
 }
 
 /*
- * Drop-error banner (PR-5a). Floats at the top of `<main>` above any
- * content. Auto-dismissed by the parent after 3s; the keyframe animation
- * handles the fade in/out so the banner doesn't pop.
+ * PR-5a's `.dropErrorBanner` and `@keyframes dropErrorFade` were removed
+ * in PR-8. Error display is now the toast system in
+ * `src/components/Toast/`. See ToastProvider.tsx for the migration note.
  *
- * PR-8 will replace this with a real toast system (R12.5 / R12.8).
- *
- * PR-6: solid red background uses --bg-error which keeps roughly the
- * same hue across light/dark (semantic "danger" color). The text is
- * always white because the bg is high-contrast.
+ * print.css still has a defensive `.dropErrorBanner { display: none }`
+ * rule in case any future code re-introduces the class — harmless when
+ * the selector matches nothing.
  */
-.dropErrorBanner {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 100;
-  padding: 8px 16px;
-  font-size: 13px;
-  color: #ffffff;
-  background: var(--bg-error);
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
-  pointer-events: none;
-  user-select: none;
-  animation: dropErrorFade 3s ease forwards;
-}
-
-@keyframes dropErrorFade {
-  0% { opacity: 0; transform: translate(-50%, -8px); }
-  6% { opacity: 1; transform: translate(-50%, 0); }
-  94% { opacity: 1; transform: translate(-50%, 0); }
-  100% { opacity: 0; transform: translate(-50%, -8px); }
-}

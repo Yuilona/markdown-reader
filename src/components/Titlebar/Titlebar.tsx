@@ -24,7 +24,7 @@ export function Titlebar() {
   };
 
   return (
-    <div className={styles.titlebar} data-tauri-drag-region>
+    <div className={styles.titlebar} data-tauri-drag-region data-print-hide>
       <div className={styles.title} data-tauri-drag-region>
         Markdown Reader
       </div>

@@ -145,7 +145,12 @@ export function SearchBar({
     : styles.counter;
 
   return (
-    <div className={styles.bar} role="search" aria-label="文档内搜索">
+    <div
+      className={styles.bar}
+      role="search"
+      aria-label="文档内搜索"
+      data-print-hide
+    >
       <input
         ref={inputRef}
         className={styles.input}

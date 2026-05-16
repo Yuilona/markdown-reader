@@ -16,6 +16,7 @@ import {
   type ThemeMode,
 } from '../../lib/settings';
 import { setMermaidTheme, type MermaidTheme } from '../../lib/mermaidLazy';
+import * as logger from '../../lib/logger';
 
 /**
  * Theme system (R9.1-R9.2, R10.2, R4.3).
@@ -140,8 +141,11 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     };
     persistedSettingsRef.current = updated;
     void writeSettings(updated).catch((err) => {
-      // eslint-disable-next-line no-console
-      console.warn('[markdown-reader] failed to write settings.json:', err);
+      // PR-8: route persistence failures through the rolling logger so
+      // a write error lands in data/logs/app.log on top of the console.
+      // logger.warn mirrors to console.warn under the hood so the prior
+      // DevTools behavior is preserved.
+      logger.warn('failed to write settings.json:', err);
     });
   }, [mode]);
 

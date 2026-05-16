@@ -1,0 +1,34 @@
+/* Status bar (R7.6).
+ *
+ * Sits at the very bottom of `.app-root`, after `<main>`. 24px tall
+ * with a hairline top border so it visually separates from the scroll
+ * area above it. Monospace font (small, muted) reads as "system
+ * information" — borrowed from VS Code / browser dev tools.
+ *
+ * Layout: row flex, single text cell that ellipsizes long URLs.
+ */
+
+.bar {
+  flex: 0 0 auto;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-muted);
+  color: var(--fg-muted);
+  font-family: var(--font-stack-code);
+  font-size: 11px;
+  user-select: none;
+  -webkit-user-select: none;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.text {
+  display: block;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

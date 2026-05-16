@@ -2,6 +2,7 @@ import { createContext, useContext } from 'react';
 import { open as shellOpen } from '@tauri-apps/plugin-shell';
 
 import { dirname, isMarkdownPath, normalizePath } from './pathUtils';
+import * as logger from './logger';
 
 /**
  * R7 link routing (PR-5b).
@@ -184,8 +185,9 @@ export async function handleLinkClick(
       try {
         await shellOpen(classified.href);
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn('[markdown-reader] failed to open external link:', classified.href, err);
+        // PR-8: log via the rolling logger AND surface to the toast
+        // system (via the onError callback the App wires to toast.show).
+        logger.warn('failed to open external link:', classified.href, err);
         ctx.onError('无法打开链接');
       }
       return;
@@ -196,12 +198,7 @@ export async function handleLinkClick(
       try {
         await shellOpen(classified.absolutePath);
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          '[markdown-reader] failed to open local file:',
-          classified.absolutePath,
-          err,
-        );
+        logger.warn('failed to open local file:', classified.absolutePath, err);
         ctx.onError('无法打开文件');
       }
       return;

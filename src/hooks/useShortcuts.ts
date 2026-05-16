@@ -23,9 +23,10 @@ interface UseShortcutsOptions {
  *   - `Ctrl+T` cycles the theme (R13, PR-6).
  *   - `Ctrl+F` opens the search bar (R13, PR-7).
  *   - `Ctrl+\` toggles the TOC sidebar (R13, PR-7).
+ *   - `Ctrl+P` opens the system print dialog (R13, R11.1, PR-8).
  *
- * Additional shortcuts (R13: Ctrl+W close, Ctrl+P print, etc.) land in
- * later PRs.
+ * Additional shortcuts (R13: Ctrl+W close, etc.) land in later PRs /
+ * follow-ups.
  *
  * PR-5a: `openFileDialog` now funnels through `loadDocument`, so the
  * recent-list is updated automatically.
@@ -36,6 +37,10 @@ interface UseShortcutsOptions {
  *
  * PR-7: the `nextMode` helper + cycle constant are imported from
  * `themeCycle.ts` (extracted in PR-7 — same source the Titlebar uses).
+ *
+ * PR-8: Ctrl+P calls `window.print()` which opens the system print
+ * dialog. On Windows that dialog includes "Save as PDF" as a built-in
+ * option so we don't need a custom export-PDF command (R11.1).
  */
 export function useShortcuts(options: UseShortcutsOptions = {}): void {
   const { onOpenDocument, onOpenSearch, onToggleToc } = options;
@@ -72,6 +77,16 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
       if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key === '\\') {
         e.preventDefault();
         if (onToggleToc) onToggleToc();
+        return;
+      }
+      // Ctrl+P opens the system print dialog (R13, R11.1, PR-8). We
+      // preventDefault so the browser's built-in print path doesn't
+      // double-fire (it would call the same window.print() anyway, but
+      // suppressing keeps the contract single-source-of-truth in the
+      // app).
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        window.print();
         return;
       }
     };

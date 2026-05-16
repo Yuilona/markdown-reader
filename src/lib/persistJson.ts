@@ -1,6 +1,7 @@
 import { readTextFile, writeTextFile, rename, exists } from '@tauri-apps/plugin-fs';
 
 import { getDataDir } from './tauri';
+import * as logger from './logger';
 
 /**
  * Generic atomic-write helper for the small JSON files we persist under
@@ -43,8 +44,11 @@ export async function readJson<T>(name: string): Promise<T | null> {
     const raw = await readTextFile(p);
     return JSON.parse(raw) as T;
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn(`[markdown-reader] failed to read ${name}:`, err);
+    // Console mirror + rolling log file (R10.8 corrupt recovery, R10.9
+    // logging). The logger.warn call internally calls console.warn so
+    // the previous behaviour is preserved without a duplicate console
+    // line.
+    logger.warn(`failed to read ${name}:`, err);
     return null;
   }
 }

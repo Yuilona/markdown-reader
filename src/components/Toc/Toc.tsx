@@ -180,6 +180,7 @@ export function Toc({
         aria-label="打开目录"
         title="打开目录 (Ctrl+\\)"
         data-no-search
+        data-print-hide
       >
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
           {/* Three-bar TOC glyph. */}
@@ -205,6 +206,10 @@ export function Toc({
       // Letting search match here would inflate the count with one
       // duplicate per visible match.
       data-no-search
+      // PR-8: hide during print (R11.3). The print stylesheet targets
+      // [data-print-hide] universally so the panel disappears for
+      // window.print() AND for the OS print dialog.
+      data-print-hide
     >
       <div className={styles.header}>
         <span className={styles.title}>目录</span>

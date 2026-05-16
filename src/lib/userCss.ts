@@ -1,6 +1,7 @@
 import { exists, readTextFile } from '@tauri-apps/plugin-fs';
 
 import { getDataDir } from './tauri';
+import * as logger from './logger';
 
 /**
  * user.css loader (R9.11).
@@ -50,7 +51,9 @@ export async function loadUserCss(): Promise<void> {
     style.textContent = css;
     document.head.appendChild(style);
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn('[markdown-reader] failed to load user.css:', err);
+    // PR-8: console mirror + rolling log file. A failed user.css read
+    // is unusual (file existed at the existence-check moment) so worth
+    // surfacing in the durable log on top of the console.
+    logger.warn('failed to load user.css:', err);
   }
 }

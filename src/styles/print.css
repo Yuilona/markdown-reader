@@ -1,0 +1,208 @@
+/* Print stylesheet (R11.1 - R11.6, PR-8).
+ *
+ * Imported LAST in main.tsx so its rules win specificity ties against
+ * the theme + module styles. Wrapped in `@media print` so it's a no-op
+ * on screen.
+ *
+ * Hide chrome via `[data-print-hide]` attributes set on the relevant
+ * components (Titlebar, Toc, SearchBar, StatusBar, ToastContainer,
+ * Mermaid toolbar). The data attribute approach beats per-component
+ * CSS-Module rules because the module-class names are hashed at build
+ * time; an attribute selector is stable across rebuilds.
+ *
+ * Light-theme force (R11.2): override every theme-variable token so
+ * the printed page reads as if the app were in light mode regardless
+ * of the actual `data-theme`. The github-markdown-css body vars are
+ * also reset so the article surface itself prints with white bg / black
+ * text — printing dark mode wastes toner and looks bad.
+ */
+
+@media print {
+  /* ---- Page setup (R11.x — A4 default). ---- */
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  /* ---- Force light color-scheme (R11.2). ---- */
+  :root,
+  :root[data-theme='dark'],
+  :root[data-theme='light'] {
+    color-scheme: light !important;
+    /* Override app chrome vars; keeps the small amount of chrome that
+     * actually prints (e.g. an unstyled fallback if hide rules miss
+     * something) readable. */
+    --bg-canvas: #ffffff !important;
+    --bg-app: #ffffff !important;
+    --bg-surface: #ffffff !important;
+    --bg-elevated: #ffffff !important;
+    --fg-default: #1f2328 !important;
+    --fg-muted: #57606a !important;
+    --fg-subtle: #6e7781 !important;
+    --border-default: #d0d7de !important;
+    --border-muted: #d8dee4 !important;
+  }
+
+  /* Override github-markdown-css's own dark-mode variables for the
+   * print page (R11.2). The selector wins over its built-in
+   * `@media (prefers-color-scheme: dark)` because data-theme is more
+   * specific. */
+  :root[data-theme='dark'] .markdown-body,
+  :root[data-theme='light'] .markdown-body,
+  .markdown-body {
+    color-scheme: light !important;
+    --bgColor-default: #ffffff !important;
+    --bgColor-muted: #f6f8fa !important;
+    --fgColor-default: #1f2328 !important;
+    --fgColor-muted: #59636e !important;
+    --fgColor-accent: #0969da !important;
+    --borderColor-default: #d1d9e0 !important;
+    --borderColor-muted: #d1d9e0b3 !important;
+    background-color: #ffffff !important;
+    color: #1f2328 !important;
+  }
+
+  /* Force Shiki tokens to paint with the light palette during print —
+   * `theme.dark.css` would otherwise win because the html element still
+   * carries data-theme='dark'. Without this, dark-mode code blocks
+   * would print with their dark-token colors on the forced-white bg
+   * (illegible). */
+  .markdown-body pre code span {
+    color: var(--shiki-light) !important;
+    font-style: var(--shiki-light-font-style, inherit) !important;
+    font-weight: var(--shiki-light-font-weight, inherit) !important;
+    text-decoration: var(--shiki-light-text-decoration, inherit) !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #1f2328 !important;
+  }
+
+  /* ---- Reset the app shell so it lays out as a normal page. ---- */
+  html,
+  body,
+  #root {
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* The app root and main are flexible columns on screen; switch them
+   * to plain block flow so the printed page can flow naturally. */
+  body > #root,
+  .app-root,
+  .app-main {
+    display: block !important;
+    background: #ffffff !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* ---- Hide chrome (R11.3). ----
+   * data-print-hide is set on: Titlebar, Toc panel + toggle, SearchBar,
+   * StatusBar, ToastContainer, Mermaid toolbar.
+   */
+  [data-print-hide] {
+    display: none !important;
+  }
+
+  /* The Lightbox is portal-rendered to document.body; it's already
+   * hidden when no content is open. As a defense in depth, force-hide
+   * any dialog with aria-modal in print — the lightbox is the only one
+   * we render. */
+  [role='dialog'][aria-modal='true'] {
+    display: none !important;
+  }
+
+  /* Drop-error banner (PR-5a, kept for back-compat — we route through
+   * the toast system in PR-8 but the global.css class still exists). */
+  .dropErrorBanner {
+    display: none !important;
+  }
+
+  /* ---- Remove the 820px max-width centering so the document uses
+   *      the full page width (R11.x). ---- */
+  .markdown-body,
+  article.markdown-body,
+  [class*='article'].markdown-body {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+
+  /* Page-break friendliness for big top-level elements. Headings stay
+   * with their first paragraph; figures/tables don't split if they fit
+   * on a page. */
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+  table, figure, img, .mermaid-host {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* ---- Code blocks: word-wrap during print (R11.5). ----
+   * On screen, `<pre>` scrolls horizontally; the print viewport has no
+   * horizontal scroll so long lines must wrap or they'd clip.
+   * Selector mirrors the on-screen pre rule scope to win the cascade. */
+  .markdown-body pre,
+  .markdown-body pre code {
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    overflow: visible !important;
+    word-break: break-word;
+    page-break-inside: avoid;
+    background: #f6f8fa !important;
+    color: #1f2328 !important;
+  }
+
+  /* ---- Print link URLs (R11.6) ----
+   * GitHub-style "(https://...)" suffix on http(s) links so a printed
+   * doc still shows where each link points.
+   */
+  .markdown-body a[href^='http']::after,
+  .markdown-body a[href^='https']::after {
+    content: ' (' attr(href) ')';
+    color: #666 !important;
+    font-size: 90%;
+    word-break: break-all;
+  }
+  .markdown-body a {
+    color: #0969da !important;
+    text-decoration: underline;
+  }
+  /* Don't append URL suffix to image-only links — would duplicate the
+   * src in the printed output. */
+  .markdown-body a:has(> img)::after {
+    content: '' !important;
+  }
+
+  /* ---- Mermaid (R11.4) ----
+   * The host div has the `mermaid-host` class (set in Mermaid.tsx). On
+   * screen it has a fixed 400px height + overflow hidden so svg-pan-
+   * zoom can take ownership. In print we want the full SVG visible,
+   * scaled to fit the page width.
+   */
+  .mermaid-host {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    border-color: #d0d7de !important;
+    page-break-inside: avoid;
+  }
+  .mermaid-host > .mermaid-svg-host,
+  .mermaid-host svg {
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+    max-height: 90vh !important;
+    display: block !important;
+  }
+}

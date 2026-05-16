@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { loadMermaid, setMermaidTheme } from '../../lib/mermaidLazy';
 import { getCached, putCached } from '../../lib/mermaidCache';
+import * as logger from '../../lib/logger';
 import { useTheme } from '../ThemeProvider/useTheme';
+import { useContextMenu } from '../ContextMenu/ContextMenuContext';
+import { useToast } from '../Toast/useToast';
 import { MermaidToolbar } from './MermaidToolbar';
 import styles from './Mermaid.module.css';
 
@@ -77,6 +80,11 @@ export function Mermaid({ source, onRequestFullscreen }: MermaidProps) {
   // effect below picks up theme changes between renders.
   const { effective } = useTheme();
   const mermaidTheme = toMermaidThemeName(effective);
+  // PR-8: context menu + toast for "Copy as image" right-click action
+  // (R14.5). Pulled here at the component root so the contextmenu
+  // handler below has stable references via closure.
+  const ctxMenu = useContextMenu();
+  const toast = useToast();
 
   const [state, setState] = useState<RenderState>(() => {
     // Check cache synchronously — this lets a remount of an already-
@@ -292,11 +300,58 @@ export function Mermaid({ source, onRequestFullscreen }: MermaidProps) {
     }
   };
 
+  // ---- PR-8 right-click "复制为图片" (R14.5).
+  // Serialize the rendered SVG to a PNG blob via canvas, then write to
+  // the system clipboard via the native Web Clipboard API. WebView2
+  // (Edge Chromium) supports `navigator.clipboard.write([ClipboardItem])`
+  // without a Tauri plugin — no permission prompt is shown because the
+  // page is technically "trusted" (same-origin Tauri app).
+  const copyMermaidAsImage = async () => {
+    if (state.kind !== 'rendered') return;
+    try {
+      const blob = await svgToPngBlob(state.svg);
+      // ClipboardItem is a browser global in modern WebView2.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ClipboardItemCtor = (window as any).ClipboardItem;
+      if (!ClipboardItemCtor || !navigator.clipboard?.write) {
+        throw new Error('Clipboard image-write API is not available');
+      }
+      await navigator.clipboard.write([
+        new ClipboardItemCtor({ 'image/png': blob }),
+      ]);
+      toast.show('已复制 Mermaid 图为 PNG', { variant: 'success' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn('Failed to copy Mermaid as image:', message);
+      toast.show('复制图片失败', { variant: 'error', details: message });
+    }
+  };
+
+  const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Only show our custom menu when the diagram is actually rendered;
+    // for loading / error states a right-click should fall through to
+    // the default browser menu so the user can copy the error message.
+    if (state.kind !== 'rendered') return;
+    e.preventDefault();
+    ctxMenu.open(e.clientX, e.clientY, [
+      {
+        label: '复制为图片',
+        onClick: () => {
+          void copyMermaidAsImage();
+        },
+      },
+    ]);
+  };
+
   // ---- Loading skeleton (R4.1).
+  // PR-8 print-stylesheet hook: every state of the Mermaid block carries
+  // the global `mermaid-host` class (in addition to the CSS Module hash
+  // class). The print rule in `styles/print.css` targets that stable
+  // class to make the SVG fit to page width during print.
   if (state.kind === 'loading') {
     return (
       <div
-        className={`${styles.container} ${styles.skeleton}`}
+        className={`${styles.container} ${styles.skeleton} mermaid-host`}
         data-no-search
         aria-busy="true"
         aria-label="加载 Mermaid 图…"
@@ -309,7 +364,7 @@ export function Mermaid({ source, onRequestFullscreen }: MermaidProps) {
   // ---- Per-block error fallback (R4.5).
   if (state.kind === 'error') {
     return (
-      <div className={`${styles.container} ${styles.error}`} data-no-search>
+      <div className={`${styles.container} ${styles.error} mermaid-host`} data-no-search>
         <div className={styles.errorTitle}>Mermaid 渲染失败</div>
         <pre className={styles.errorMessage}>{state.message}</pre>
         <details>
@@ -329,10 +384,14 @@ export function Mermaid({ source, onRequestFullscreen }: MermaidProps) {
   return (
     <div
       ref={containerRef}
-      className={styles.container}
+      className={`${styles.container} mermaid-host`}
       data-no-search
+      onContextMenu={handleContextMenu}
     >
-      <div className={styles.svgHost} dangerouslySetInnerHTML={{ __html: state.svg }} />
+      <div
+        className={`${styles.svgHost} mermaid-svg-host`}
+        dangerouslySetInnerHTML={{ __html: state.svg }}
+      />
       <MermaidToolbar
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
@@ -341,4 +400,99 @@ export function Mermaid({ source, onRequestFullscreen }: MermaidProps) {
       />
     </div>
   );
+}
+
+/**
+ * Serialize an SVG string to a PNG blob via an off-DOM canvas.
+ *
+ * Approach:
+ *   1. Wrap the SVG into a data URL so an `<img>` can load it.
+ *   2. Wait for the image to load — we need the rasterized pixel
+ *      dimensions to size the canvas correctly.
+ *   3. Draw the image into a canvas at the SVG's natural size.
+ *   4. canvas.toBlob('image/png') → blob.
+ *
+ * Failure modes:
+ *   - SVG with external resources (e.g. <image href="https://...">):
+ *     the WebView will reject the load due to cross-origin canvas taint
+ *     and `toBlob` will throw. Mermaid output is self-contained text +
+ *     paths, so this isn't a practical concern for us.
+ *   - Very large diagrams (>16K px in either dimension) may exceed the
+ *     canvas size limit. We cap at 8192px for safety; oversize diagrams
+ *     get the cap, which is still printable / sharable.
+ */
+function svgToPngBlob(svgString: string): Promise<Blob> {
+  return new Promise<Blob>((resolve, reject) => {
+    // Determine the SVG's natural dimensions by parsing the viewBox or
+    // explicit width/height. Falls back to 1024x768 for malformed SVGs.
+    const dims = inferSvgPixelSize(svgString);
+    // btoa requires Latin-1. unescape(encodeURIComponent(...)) is the
+    // canonical incantation for UTF-8-safe base64 in browsers.
+    const encoded = window.btoa(unescape(encodeURIComponent(svgString)));
+    const url = `data:image/svg+xml;base64,${encoded}`;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = dims.width;
+        canvas.height = dims.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Failed to acquire 2D canvas context'));
+          return;
+        }
+        // White background so transparent SVGs paste nicely into apps
+        // that don't blend onto a known surface (e.g. Office).
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('canvas.toBlob returned null'));
+        }, 'image/png');
+      } catch (err) {
+        reject(err);
+      }
+    };
+    img.onerror = () => {
+      reject(new Error('Failed to load SVG into an Image element'));
+    };
+    img.src = url;
+  });
+}
+
+/** Best-effort pixel-size inference from an SVG string. */
+function inferSvgPixelSize(svgString: string): { width: number; height: number } {
+  const MAX = 8192;
+  const FALLBACK = { width: 1024, height: 768 };
+  // Prefer the explicit width / height attributes when present.
+  const widthMatch = svgString.match(/<svg[^>]*\swidth=["']([0-9.]+)(?:px)?["']/i);
+  const heightMatch = svgString.match(/<svg[^>]*\sheight=["']([0-9.]+)(?:px)?["']/i);
+  if (widthMatch && heightMatch) {
+    const w = Math.round(parseFloat(widthMatch[1]));
+    const h = Math.round(parseFloat(heightMatch[1]));
+    if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
+      return { width: Math.min(w, MAX), height: Math.min(h, MAX) };
+    }
+  }
+  // Fall back to viewBox.
+  const vbMatch = svgString.match(
+    /<svg[^>]*\sviewBox=["']\s*[\d.\s-]+\s+[\d.\s-]+\s+([0-9.]+)\s+([0-9.]+)\s*["']/i,
+  );
+  if (vbMatch) {
+    const w = Math.round(parseFloat(vbMatch[1]));
+    const h = Math.round(parseFloat(vbMatch[2]));
+    if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
+      // Mermaid viewBoxes can be small (a few hundred px). Upscale by
+      // 2x for a higher-DPI copy so the PNG looks crisp when pasted
+      // into a slide / chat. Capped at MAX.
+      const scale = 2;
+      return {
+        width: Math.min(Math.max(w * scale, 100), MAX),
+        height: Math.min(Math.max(h * scale, 100), MAX),
+      };
+    }
+  }
+  return FALLBACK;
 }

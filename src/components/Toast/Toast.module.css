@@ -1,0 +1,151 @@
+/* Toast stack (R12.5, R12.8, PR-8).
+ *
+ * Positioned bottom-center of the viewport. Stack grows UPWARD as new
+ * toasts are added so the most recent message is closest to the user's
+ * natural focal point at the bottom of the screen. Animated slide-in
+ * from below with a small fade for a modern polish (per the user's
+ * "lean toward animated" UX preference).
+ *
+ * z-index sits ABOVE the status bar (1500) and ABOVE the TOC/SearchBar
+ * (1000/1100) but BELOW the lightbox (9999) and BELOW the context menu
+ * (9500) — toasts shouldn't crowd a modal or context menu the user just
+ * opened, but they should always be visible above the document chrome.
+ */
+
+.container {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none; /* allow clicks through gaps in the stack */
+  max-width: calc(100vw - 32px);
+}
+
+.card {
+  pointer-events: auto;
+  min-width: 280px;
+  max-width: 480px;
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+  color: var(--fg-default);
+  border: 1px solid var(--border-default);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  font-size: 13px;
+  line-height: 1.4;
+  animation: toastIn 180ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Variant colors — the left border is the primary semantic signal. */
+.cardInfo {
+  border-left-color: var(--accent);
+}
+
+.cardSuccess {
+  border-left-color: #1f883d; /* GitHub success green */
+}
+
+.cardError {
+  border-left-color: var(--bg-error);
+}
+
+.cardMain {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.message {
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-word;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+.closeBtn {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 0;
+}
+
+.closeBtn:hover {
+  background: var(--bg-hover);
+  color: var(--fg-default);
+}
+
+.closeBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.detailsRow {
+  margin-top: 2px;
+}
+
+.detailsToggle {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--fg-link);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.detailsToggle:hover {
+  color: var(--fg-link-hover);
+  text-decoration: underline;
+}
+
+.detailsToggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+.detailsBody {
+  margin: 6px 0 0 0;
+  padding: 8px;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-muted);
+  border-radius: 4px;
+  font-family: var(--font-stack-code);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--fg-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow: auto;
+  user-select: text;
+}

@@ -4,9 +4,16 @@ import { EmptyState } from './components/EmptyState/EmptyState';
 import { DocumentView } from './components/DocumentView/DocumentView';
 import { LightboxProvider } from './components/Lightbox/LightboxContext';
 import { ThemeProvider } from './components/ThemeProvider/ThemeProvider';
+import { ToastProvider } from './components/Toast/ToastProvider';
+import { useToast } from './components/Toast/useToast';
+import { ContextMenuProvider } from './components/ContextMenu/ContextMenuContext';
+import { StatusBarProvider } from './components/StatusBar/StatusBarContext';
+import { StatusBar } from './components/StatusBar/StatusBar';
+import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useDragDrop } from './hooks/useDragDrop';
 import { useFileWatcher } from './hooks/useFileWatcher';
+import { usePrintMode } from './hooks/usePrintMode';
 import {
   registerSecondInstanceListener,
   takeCliLaunchPath,
@@ -15,6 +22,7 @@ import { loadDocument, type LoadedDocument } from './lib/tauri';
 import { cleanupStaleTemp } from './lib/recentFiles';
 import { loadUserCss } from './lib/userCss';
 import { LinkRouterContext, type LinkRouterContextValue } from './lib/linkRouter';
+import * as logger from './lib/logger';
 import {
   DEFAULT_SETTINGS,
   readSettings,
@@ -22,7 +30,6 @@ import {
   type Settings,
 } from './lib/settings';
 
-const DROP_ERROR_MS = 3000;
 const DROP_ERROR_TEXT = '无法打开：仅支持 .md / .markdown 文件';
 
 /**
@@ -30,6 +37,26 @@ const DROP_ERROR_TEXT = '无法打开：仅支持 .md / .markdown 文件';
  * descendant (including Titlebar's theme toggle and useShortcuts's
  * Ctrl+T handler) can call useTheme(). The actual app body lives in
  * <AppContent> to keep the provider boundary clean.
+ *
+ * PR-8 provider nesting (outer → inner):
+ *   ThemeProvider
+ *     ToastProvider              ← exposes useToast()
+ *       ContextMenuProvider      ← exposes useContextMenu()
+ *         StatusBarProvider      ← exposes useStatusBar()
+ *           AppContent
+ *             Titlebar           (OUTSIDE the error boundary so the
+ *                                 user can always close the window)
+ *             LightboxProvider
+ *               LinkRouterProvider
+ *                 main
+ *                   ErrorBoundary
+ *                     DocumentView / EmptyState
+ *             StatusBar          (mounted after main so it sits at the
+ *                                 bottom of `.app-root`)
+ *
+ * The error boundary intentionally wraps ONLY the document tree. A
+ * render crash inside DocumentView still leaves the Titlebar, theme
+ * toggle, toast system, and reload button reachable.
  *
  * We also fire `loadUserCss()` here (not inside AppContent) so the
  * read-once user.css inject runs exactly once for the app lifetime,
@@ -42,17 +69,29 @@ export default function App() {
 
   return (
     <ThemeProvider>
-      <AppContent />
+      <ToastProvider>
+        <ContextMenuProvider>
+          <StatusBarProvider>
+            <AppContent />
+          </StatusBarProvider>
+        </ContextMenuProvider>
+      </ToastProvider>
     </ThemeProvider>
   );
 }
 
 function AppContent() {
+  // PR-8: pull the toast system once. All error-display call sites
+  // (drop error, link router failure, file read failure) route through
+  // toast.show now instead of the old DropErrorBanner.
+  const toast = useToast();
+  // PR-8: register the beforeprint/afterprint body-class toggle so the
+  // @media print rules in styles/print.css have a state hook to gate on.
+  usePrintMode();
   // PR-2: a single in-memory document. Multi-file/tabs is explicitly
   // out of scope (and probably forever) per PRD §"Out of Scope".
   const [doc, setDoc] = useState<LoadedDocument | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [dropError, setDropError] = useState<string | null>(null);
 
   // ---- PR-7: TOC visibility + SearchBar visibility. ----
   //
@@ -88,14 +127,16 @@ function AppContent() {
     };
   }, []);
 
-  const showError = useCallback((message: string) => {
-    // Re-trigger by clearing first so a second consecutive invalid drop
-    // re-runs the CSS animation from the start.
-    setDropError(null);
-    requestAnimationFrame(() => {
-      setDropError(message);
-    });
-  }, []);
+  // PR-8: showError replaces the PR-5a inline-banner state. Callers
+  // hand us a one-line message and we route through toast.show with
+  // variant 'error'. Errors are sticky by default — the user dismisses
+  // them via the toast's ✕ button.
+  const showError = useCallback(
+    (message: string, details?: string) => {
+      toast.show(message, { variant: 'error', details });
+    },
+    [toast],
+  );
 
   const showDropError = useCallback(() => {
     showError(DROP_ERROR_TEXT);
@@ -109,10 +150,11 @@ function AppContent() {
    *   - Second-instance event (via registerSecondInstanceListener)
    *   - CLI argv (via takeCliLaunchPath on mount)
    *   - PR-5b: in-doc link to a local .md (via LinkRouterContext)
+   *   - PR-8: ErrorBoundary reset (re-load the current doc.path)
    *
    * loadDocument() itself handles read + recent.json update + path
    * normalization, so this wrapper is essentially "load then promote
-   * to state, or show an error banner".
+   * to state, or show an error toast".
    */
   const setDocFromPath = useCallback(
     async (path: string): Promise<void> => {
@@ -120,10 +162,10 @@ function AppContent() {
       if (loaded) {
         setDoc(loaded);
       } else {
-        showDropError();
+        showError('无法打开文件');
       }
     },
-    [showDropError],
+    [showError],
   );
 
   // PR-5b: file-watcher reload swaps doc.text WITHOUT changing doc.path,
@@ -136,14 +178,6 @@ function AppContent() {
     currentPath: doc?.path ?? null,
     onReload: onWatcherReload,
   });
-
-  // Auto-dismiss the banner after DROP_ERROR_MS. PR-8 will replace this
-  // with a real toast system.
-  useEffect(() => {
-    if (!dropError) return;
-    const id = window.setTimeout(() => setDropError(null), DROP_ERROR_MS);
-    return () => window.clearTimeout(id);
-  }, [dropError]);
 
   // PR-7: Ctrl+F handler. When the bar is already open, re-focus +
   // select the input so the user can re-type to replace their previous
@@ -174,16 +208,18 @@ function AppContent() {
       };
       persistedSettingsRef.current = updated;
       void writeSettings(updated).catch((err) => {
-        // eslint-disable-next-line no-console
-        console.warn('[markdown-reader] failed to persist showTocByDefault:', err);
+        // PR-8: route through rolling logger AND console (logger.warn
+        // calls console.warn internally), so a persistence failure lands
+        // in data/logs/app.log on top of DevTools.
+        logger.warn('failed to persist showTocByDefault:', err);
       });
       return next;
     });
   }, []);
 
-  // Wire Ctrl+O / Ctrl+T / Ctrl+F / Ctrl+\. The shortcut returns a
-  // LoadedDocument for Ctrl+O (recent already updated by openFileDialog
-  // → loadDocument); we just promote it.
+  // Wire Ctrl+O / Ctrl+T / Ctrl+F / Ctrl+\ / Ctrl+P. The shortcut returns
+  // a LoadedDocument for Ctrl+O (recent already updated by
+  // openFileDialog → loadDocument); we just promote it.
   useShortcuts({
     onOpenDocument: setDoc,
     onOpenSearch: handleOpenSearch,
@@ -218,7 +254,8 @@ function AppContent() {
 
   // PR-5b: link router context. In-doc anchor `<a>` overrides pull this
   // to route local .md clicks back to `setDocFromPath` and to surface
-  // shell.open failures through the same dropError banner.
+  // shell.open failures through the toast system (PR-8 replaces the
+  // PR-5a banner with toast.show under the same `showError` API).
   const linkRouterValue = useMemo<LinkRouterContextValue>(
     () => ({
       openDocument: (p) => {
@@ -239,6 +276,23 @@ function AppContent() {
 
   const handleCloseSearch = useCallback(() => setSearchOpen(false), []);
 
+  // PR-8 ErrorBoundary reset:
+  //   When the user clicks "重新加载" in the fallback UI, we clear the
+  //   current doc and re-load from the same path. Two-phase reset:
+  //     1. setDoc(null) so the boundary sees a different `resetKey` and
+  //        clears its error state.
+  //     2. void setDocFromPath(path) re-fetches the file. If the file
+  //        itself is what crashed render (e.g. a Mermaid block triggered
+  //        a deep mermaid bug), the user can fall back to ✕-closing the
+  //        toast and dragging in a different file.
+  const handleBoundaryReset = useCallback(() => {
+    const path = doc?.path;
+    setDoc(null);
+    if (path) {
+      void setDocFromPath(path);
+    }
+  }, [doc, setDocFromPath]);
+
   // LightboxProvider wraps the main content so DocumentView's Mermaid
   // toolbar + image click can dispatch open(). LinkRouterContext wraps
   // it for the same reason on the `<a>` override.
@@ -248,43 +302,31 @@ function AppContent() {
       <LinkRouterContext.Provider value={linkRouterValue}>
         <LightboxProvider>
           <main className="app-main">
-            {dropError && <DropErrorBanner message={dropError} />}
-            {doc ? (
-              <DocumentView
-                doc={doc}
-                tocVisible={tocVisible}
-                onToggleToc={handleToggleToc}
-                searchOpen={searchOpen}
-                onCloseSearch={handleCloseSearch}
-                searchInputRef={searchInputRef}
-              />
-            ) : (
-              <EmptyState
-                onOpen={setDoc}
-                onPickRecent={setDocFromPath}
-                isDragOver={isDragOver}
-              />
-            )}
+            <ErrorBoundary
+              onReset={handleBoundaryReset}
+              resetKey={doc?.path ?? null}
+            >
+              {doc ? (
+                <DocumentView
+                  doc={doc}
+                  tocVisible={tocVisible}
+                  onToggleToc={handleToggleToc}
+                  searchOpen={searchOpen}
+                  onCloseSearch={handleCloseSearch}
+                  searchInputRef={searchInputRef}
+                />
+              ) : (
+                <EmptyState
+                  onOpen={setDoc}
+                  onPickRecent={setDocFromPath}
+                  isDragOver={isDragOver}
+                />
+              )}
+            </ErrorBoundary>
           </main>
         </LightboxProvider>
       </LinkRouterContext.Provider>
-    </div>
-  );
-}
-
-/**
- * Minimal inline error banner. Intentionally not a "toast system" —
- * PR-8 ships that (R12.5). For PR-5a/PR-5b we just want the user to see
- * "you dropped the wrong kind of file" / "couldn't open that link"
- * without a console-only failure.
- *
- * Lives at the top of `<main>` so it floats above both EmptyState and
- * DocumentView. CSS auto-fades; the parent setTimeout removes it.
- */
-function DropErrorBanner({ message }: { message: string }) {
-  return (
-    <div className="dropErrorBanner" role="alert" aria-live="polite">
-      {message}
+      <StatusBar />
     </div>
   );
 }

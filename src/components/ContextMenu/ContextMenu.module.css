@@ -1,0 +1,81 @@
+/* Right-click context menu (R6.7, R7.7, R14.5).
+ *
+ * Lives at z-index 9500 — above the status bar / toasts / TOC / search
+ * but BELOW the lightbox (9999). The PRD brief says context menus
+ * should never appear over an open lightbox.
+ *
+ * Width is content-driven (min/max-width caps so very long labels don't
+ * blow up the menu). Shadow + rounded corners give it the modern
+ * floating-panel look.
+ *
+ * Theme transitions inherit from `transitions.css`.
+ */
+
+.menu {
+  position: fixed;
+  z-index: 9500;
+  min-width: 160px;
+  max-width: 280px;
+  padding: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+  font-size: 13px;
+  color: var(--fg-default);
+  user-select: none;
+  -webkit-user-select: none;
+  /* Animation: small fade + tiny upward slide so the menu doesn't pop. */
+  animation: ctxMenuIn 100ms ease-out both;
+}
+
+@keyframes ctxMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 4px;
+  color: var(--fg-default);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.item:active:not(:disabled) {
+  background: var(--bg-active);
+}
+
+.itemDisabled {
+  color: var(--fg-subtle);
+  cursor: default;
+}
+
+.separator {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border-muted);
+}

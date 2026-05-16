@@ -36,7 +36,14 @@ export function MermaidToolbar({
   };
 
   return (
-    <div className={styles.toolbar} role="toolbar" aria-label="Mermaid diagram controls">
+    <div
+      className={styles.toolbar}
+      role="toolbar"
+      aria-label="Mermaid diagram controls"
+      // PR-8: hide during print (R11.3) — the toolbar is hover-only UX
+      // and would otherwise paint on top of the printed SVG.
+      data-print-hide
+    >
       <button
         type="button"
         className={styles.toolbarBtn}

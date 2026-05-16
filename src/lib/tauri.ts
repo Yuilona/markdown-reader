@@ -5,6 +5,7 @@ import { readTextFile } from '@tauri-apps/plugin-fs';
 
 import { normalizePath, isMarkdownPath } from './pathUtils';
 import { pushRecent } from './recentFiles';
+import * as logger from './logger';
 
 /**
  * Thin wrappers around Tauri APIs.
@@ -72,8 +73,10 @@ export async function loadDocument(
     }
     return { path: normalized, text };
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn('[markdown-reader] failed to read file:', normalized, err);
+    // PR-8: console mirror + rolling log file. The toast for "file
+    // read failed" (R12.5) is emitted at the caller layer (App.tsx
+    // `setDocFromPath`'s null branch).
+    logger.warn('failed to read file:', normalized, err);
     return null;
   }
 }

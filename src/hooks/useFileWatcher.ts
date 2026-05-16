@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 
 import { loadDocument, startWatching, stopWatching, type LoadedDocument } from '../lib/tauri';
 import { pathsEqual } from '../lib/pathUtils';
+import * as logger from '../lib/logger';
 
 interface UseFileWatcherOptions {
   /** The path the app is currently displaying. `null` when on EmptyState. */
@@ -52,8 +53,8 @@ export function useFileWatcher(options: UseFileWatcherOptions): void {
         if (cancelled || !currentPath) return;
         await startWatching(currentPath);
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn('[markdown-reader] failed to (re)start file watcher:', err);
+        // PR-8: console mirror + rolling log file.
+        logger.warn('failed to (re)start file watcher:', err);
       }
     })();
     return () => {
@@ -103,8 +104,7 @@ export function useFileWatcher(options: UseFileWatcherOptions): void {
         }
       })
       .catch((err) => {
-        // eslint-disable-next-line no-console
-        console.warn('[markdown-reader] failed to register file-changed listener:', err);
+        logger.warn('failed to register file-changed listener:', err);
       });
 
     return () => {

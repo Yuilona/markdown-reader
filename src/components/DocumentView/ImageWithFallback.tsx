@@ -17,6 +17,12 @@ interface ImageWithFallbackProps {
    *  Skipped when there's no resolvedSrc OR when the image has failed
    *  to load (clicking a broken placeholder would lightbox an empty URL). */
   onClick?: () => void;
+  /** PR-8: right-click handler — installed by DocumentView to show the
+   *  R6.7 image context menu (Copy image / Save as / Open in system).
+   *  Attached to BOTH the rendered <img> and the failure placeholder
+   *  span so the user can still pick "Save as" on a placeholder that
+   *  shows a broken HTTP URL. */
+  onContextMenu?: (event: React.MouseEvent<HTMLElement>) => void;
 }
 
 /**
@@ -42,6 +48,7 @@ export function ImageWithFallback({
   alt,
   originalSrc,
   onClick,
+  onContextMenu,
 }: ImageWithFallbackProps) {
   const [failed, setFailed] = useState(false);
 
@@ -49,7 +56,11 @@ export function ImageWithFallback({
   if (!resolvedSrc || failed) {
     const label = originalSrc ? basename(originalSrc) || originalSrc : alt;
     return (
-      <span className={styles.placeholder} title={originalSrc ?? ''}>
+      <span
+        className={styles.placeholder}
+        title={originalSrc ?? ''}
+        onContextMenu={onContextMenu}
+      >
         <span className={styles.placeholderIcon} aria-hidden="true">
           {/* "broken image" glyph — keeps the affordance even when alt
               is empty. Inline SVG for crisp scaling. */}
@@ -77,6 +88,7 @@ export function ImageWithFallback({
       loading="lazy"
       style={imgStyle}
       onClick={onClick}
+      onContextMenu={onContextMenu}
       onError={() => setFailed(true)}
     />
   );

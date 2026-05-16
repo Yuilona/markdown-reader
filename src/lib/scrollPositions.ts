@@ -1,5 +1,6 @@
 import { normalizePath, pathsEqual } from './pathUtils';
 import { atomicWriteJson, readJson } from './persistJson';
+import * as logger from './logger';
 
 /**
  * Scroll-position memory (R10.4).
@@ -128,8 +129,8 @@ export async function saveScroll(path: string, y: number): Promise<void> {
       positions: next,
     });
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn('[markdown-reader] failed to write scroll-positions.json:', err);
+    // PR-8: console mirror + rolling log file (R10.9).
+    logger.warn('failed to write scroll-positions.json (save):', err);
   }
 }
 
@@ -148,7 +149,6 @@ export async function clearScroll(path: string): Promise<void> {
       positions: filtered,
     });
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn('[markdown-reader] failed to write scroll-positions.json:', err);
+    logger.warn('failed to write scroll-positions.json (clear):', err);
   }
 }
