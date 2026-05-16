@@ -19,13 +19,21 @@
   cursor: zoom-out;
 }
 
+/* The panzoom target MUST start at the owner's (0,0) for cursor-anchored
+ * zoom math to work. Earlier we used flex centering (align/justify), which
+ * offset the target by ~(viewport/2 - target/2). panzoom internally
+ * assumes targetOrigin = (0,0) when computing the new translate from
+ * the cursor anchor, so the flex offset caused the diagram to drift
+ * (user saw "zooms toward bottom-right").
+ *
+ * Fix: make .contentArea a plain positioned container; absolutely
+ * position the .pz-target at (0,0); use `pz.moveTo(initialX, initialY)`
+ * after mount to center the target. panzoom's default wheel handler
+ * then anchors correctly on the cursor. */
 .contentArea {
   width: 100%;
   height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* panzoom transforms the inner target; the area itself just hosts. */
+  position: relative;
   cursor: grab;
   overflow: hidden;
 }
@@ -43,11 +51,9 @@
  * with the diagram — that's intentional: the card stays visually
  * stitched to its contents at any zoom level. */
 .svgWrapper {
-  max-width: 95vw;
-  max-height: 95vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: absolute;
+  top: 0;
+  left: 0;
   background: var(--bg-canvas);
   padding: 24px;
   border-radius: 8px;
@@ -58,15 +64,20 @@
 .svgWrapper > svg {
   display: block;
   /* Mermaid's SVG often carries inline width/height attributes — let CSS
-   * win so the diagram scales to the wrapper instead of clipping. */
-  width: 100%;
+   * win so the diagram scales to fit a reasonable card without
+   * exceeding the viewport. */
+  width: auto;
   height: auto;
   max-width: calc(95vw - 48px);
   max-height: calc(95vh - 48px);
 }
 
-/* Image (raster lightbox). */
+/* Image (raster lightbox). Same absolute-positioning rule so panzoom's
+ * cursor anchor stays accurate. */
 .image {
+  position: absolute;
+  top: 0;
+  left: 0;
   display: block;
   max-width: 95vw;
   max-height: 95vh;

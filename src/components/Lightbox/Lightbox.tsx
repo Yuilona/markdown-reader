@@ -90,41 +90,42 @@ export function Lightbox({ content, onClose }: LightboxProps) {
         // Generous range — fullscreen view encourages deep inspection.
         minZoom: 0.1,
         maxZoom: 20,
-        // User feedback: panzoom's default wheel zoom anchors at the
-        // cursor position, which means a small wheel tick near a corner
-        // sends the diagram flying out of viewport. Disable the default
-        // wheel handler (returning truthy from beforeWheel skips
-        // panzoom's own logic) and attach our own viewport-center-
-        // anchored handler below.
-        beforeWheel: () => true,
+        // panzoom's default wheel zoom anchors on the cursor — exactly
+        // what the user wants now that the target sits at owner (0,0)
+        // (the math assumes that). The previous "fly toward bottom-
+        // right" bug was the flex-centering offset breaking the anchor
+        // math, fixed in the CSS rather than here.
       });
       panZoomRef.current = pz;
 
-      // Custom wheel handler: zoom toward the VIEWPORT CENTER, not the
-      // cursor, with a controlled ~15% step. Result: the visible content
-      // stays roughly where it is on screen; the user can chain ticks
-      // for bigger jumps without their focal point drifting.
-      const wheelHandler = (e: WheelEvent) => {
-        e.preventDefault();
-        const cx = window.innerWidth / 2;
-        const cy = window.innerHeight / 2;
-        const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-        pz.smoothZoom(cx, cy, factor);
-      };
-      target.addEventListener('wheel', wheelHandler, { passive: false });
+      // Center the target inside the owner on the next layout frame.
+      // The wrapper's size is determined by the SVG (or img) inside,
+      // which finishes layout in the frame after dangerouslySetInnerHTML
+      // commits. Storing initialX/Y so the dblclick handler can reset to
+      // the same centered state instead of (0,0).
+      let initialX = 0;
+      let initialY = 0;
+      const rafId = window.requestAnimationFrame(() => {
+        if (disposed) return;
+        const ownerRect = container.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        initialX = (ownerRect.width - targetRect.width) / 2;
+        initialY = (ownerRect.height - targetRect.height) / 2;
+        pz.moveTo(initialX, initialY);
+      });
 
-      // R5.4: dblclick → reset to identity transform. `moveTo(0,0)` +
-      // `zoomAbs(0,0,1)` resets translation and scale; the clientX/Y
-      // arguments to zoomAbs are the screen anchor — using (0,0) is fine
-      // because at scale 1 there's nothing to anchor around.
+      // R5.4: dblclick → reset to centered + scale 1. Use the stored
+      // initialX/Y so the reset returns the diagram to its initial
+      // mounted position, not to owner (0,0) which would shove it to
+      // the top-left corner.
       const dblHandler = (e: MouseEvent) => {
         e.preventDefault();
-        pz.moveTo(0, 0);
-        pz.zoomAbs(0, 0, 1);
+        pz.zoomAbs(initialX, initialY, 1);
+        pz.moveTo(initialX, initialY);
       };
       target.addEventListener('dblclick', dblHandler);
       dblCleanupRef.current = () => {
-        target.removeEventListener('wheel', wheelHandler);
+        window.cancelAnimationFrame(rafId);
         target.removeEventListener('dblclick', dblHandler);
       };
     });
