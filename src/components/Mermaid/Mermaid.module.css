@@ -19,7 +19,10 @@
   border: 1px solid var(--border-img-placeholder);
   border-radius: 6px;
   background: var(--bg-mermaid-container);
-  min-height: 200px;
+  /* Per-user: doubled from the original 200px floor so wide diagrams
+   * have more breathing room inline before the user reaches for the
+   * fullscreen toolbar button. */
+  min-height: 400px;
   box-sizing: border-box;
   /* Render isolation so a deep zoom doesn't bleed shadows etc. into
      the surrounding markdown body. */
