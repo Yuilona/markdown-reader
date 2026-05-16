@@ -1,0 +1,39 @@
+/* Failure placeholder for <img> elements (R6.5).
+ *
+ * Rendered as an inline-flex span so it composes inside paragraph flow
+ * the same way a normal <img> would — markdown rarely puts images on
+ * their own line, and breaking flow with a block-level placeholder
+ * would jump the page around when the image fails after layout.
+ *
+ * Color palette is intentionally light-mode-only for PR-5b; PR-6's
+ * theme system will add a CSS-variable equivalent for dark mode. */
+
+.placeholder {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f6f8fa;
+  border: 1px dashed #d0d7de;
+  border-radius: 6px;
+  color: #57606a;
+  font-size: 13px;
+  font-family: inherit;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.placeholderIcon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.placeholderLabel {
+  /* Long URLs should ellipsize rather than break the line wrap of the
+   *  surrounding paragraph. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}

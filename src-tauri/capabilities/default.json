@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for the main window. Grants the core defaults (event listen/unlisten, read-only window queries) plus the explicit window-write commands used by the custom Win11 titlebar (minimize / toggle-maximize / close) and the unminimize/show/set-focus needed by the single-instance Rust handler. Grants dialog:open for Ctrl+O. Filesystem grants: read-text-file (loading the .md), write-text-file + rename + remove + exists (recent.json atomic write & cleanup, PR-5a). Filesystem scope is intentionally unrestricted in v0.1: the user explicitly chooses every file they open.",
+  "description": "Default capability for the main window. Grants the core defaults (event listen/unlisten, read-only window queries) plus the explicit window-write commands used by the custom Win11 titlebar (minimize / toggle-maximize / close) and the unminimize/show/set-focus needed by the single-instance Rust handler. Grants dialog:open for Ctrl+O. Filesystem grants: read-text-file (loading the .md), write-text-file + rename + remove + exists (recent.json atomic write & cleanup, PR-5a; scroll-positions.json same pattern, PR-5b). Filesystem scope is intentionally unrestricted in v0.1: the user explicitly chooses every file they open. Shell grant: open (PR-5b) for R7 link routing — http/https/mailto + local-non-md open via system default app; scope is permissive in v0.1 (security model: user authored every link).",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -32,6 +32,16 @@
     {
       "identifier": "fs:allow-exists",
       "allow": [{ "path": "**" }]
+    },
+    {
+      "identifier": "shell:allow-open",
+      "allow": [
+        { "url": "https://**" },
+        { "url": "http://**" },
+        { "url": "mailto:*" },
+        { "url": "tel:*" },
+        { "path": "**" }
+      ]
     }
   ]
 }

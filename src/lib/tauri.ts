@@ -14,8 +14,12 @@ import { pushRecent } from './recentFiles';
  *
  * PR-5a: all five file-open paths (dialog / drag-drop / recent click /
  * second-instance / CLI) funnel through `loadDocument(path)` so that
- * recent-list bookkeeping and error handling stay in one place. The
- * previous `openFileDialog()` is retained as a thin wrapper.
+ * recent-list bookkeeping and error handling stay in one place.
+ *
+ * PR-5b: `loadDocument(path, { skipRecent: true })` lets the file-watcher
+ * reload path re-read the file WITHOUT bumping the recent list — saving
+ * in an external editor should not be treated as a "user-initiated open"
+ * for recent-list semantics.
  */
 
 export const minimize = (): Promise<void> => getCurrentWindow().minimize();
@@ -32,24 +36,40 @@ export interface LoadedDocument {
   text: string;
 }
 
+/** Options for `loadDocument`. */
+export interface LoadDocumentOptions {
+  /**
+   * If true, the recent.json LRU is NOT bumped. Used by the file-watcher
+   * auto-reload path (R2.6) where the re-read is internal, not a fresh
+   * "user opened this file" event.
+   */
+  skipRecent?: boolean;
+}
+
 /**
- * Read a markdown file from disk and (on success) update the recent list.
- * Returns `null` on read failure — a proper toast UI lands in PR-8 (R12.5);
- * for now callers can show a minimal banner.
+ * Read a markdown file from disk. On success and when `skipRecent` is
+ * falsy, also updates the recent list. Returns `null` on read failure —
+ * a proper toast UI lands in PR-8 (R12.5); for now callers can show a
+ * minimal banner.
  *
  * Path is normalized to backslash form so both the in-app `LoadedDocument`
  * and the persisted recent.json share one representation.
  */
-export async function loadDocument(path: string): Promise<LoadedDocument | null> {
+export async function loadDocument(
+  path: string,
+  options: LoadDocumentOptions = {},
+): Promise<LoadedDocument | null> {
   if (!isMarkdownPath(path)) {
     return null;
   }
   const normalized = normalizePath(path);
   try {
     const text = await readTextFile(normalized);
-    // Fire-and-forget the recent-list update. A persistence failure must
-    // never block the document open.
-    void pushRecent(normalized);
+    if (!options.skipRecent) {
+      // Fire-and-forget the recent-list update. A persistence failure must
+      // never block the document open.
+      void pushRecent(normalized);
+    }
     return { path: normalized, text };
   } catch (err) {
     // eslint-disable-next-line no-console
@@ -73,3 +93,14 @@ export async function openFileDialog(): Promise<LoadedDocument | null> {
   }
   return loadDocument(picked);
 }
+
+// ---- File watcher (PR-5b, R2.6) -------------------------------------------
+
+/** Begin watching `path` for external modifications. Replaces any
+ *  currently-watched file. Errors are surfaced to the caller — the App
+ *  hook silently logs them (a missing watcher is degraded UX, not fatal). */
+export const startWatching = (path: string): Promise<void> =>
+  invoke('start_watching', { path });
+
+/** Stop the active file watcher. Idempotent (no-op if nothing watched). */
+export const stopWatching = (): Promise<void> => invoke('stop_watching');

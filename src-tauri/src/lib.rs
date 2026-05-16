@@ -1,9 +1,12 @@
 mod data_dir;
+mod file_watcher;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 use tauri::{Emitter, Manager, State};
+
+use file_watcher::WatcherState;
 
 /// Tauri command exposed to the frontend.
 /// Returns the absolute path of the portable data directory as a string.
@@ -21,6 +24,24 @@ struct CliLaunchState(Mutex<Option<String>>);
 #[tauri::command]
 fn take_cli_launch_path(state: State<'_, CliLaunchState>) -> Option<String> {
     state.0.lock().ok().and_then(|mut g| g.take())
+}
+
+/// Start watching a file for external modifications. Replaces any
+/// previously-watched file. Emits a `file-changed` event (debounced 200ms)
+/// when the target is modified.
+#[tauri::command]
+fn start_watching(
+    app: tauri::AppHandle,
+    state: State<'_, WatcherState>,
+    path: String,
+) -> Result<(), String> {
+    file_watcher::start_watching(&state, &app, path)
+}
+
+/// Stop watching the currently-watched file. No-op if nothing is watched.
+#[tauri::command]
+fn stop_watching(state: State<'_, WatcherState>) -> Result<(), String> {
+    file_watcher::stop_watching(&state)
 }
 
 /// Extract the first non-flag argument that looks like a markdown file path
@@ -62,6 +83,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(CliLaunchState(Mutex::new(cli_path)))
+        .manage(WatcherState::new())
         // Single-instance plugin: when a second copy is launched, forward its
         // argv to the running window via a "second-instance" event and bring
         // the window to the foreground. PR-5a wires the frontend listener
@@ -76,12 +98,20 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        // PR-5b: shell plugin powers R7 link routing (`shell.open` for
+        // http/https/mailto + non-md local files).
+        .plugin(tauri_plugin_shell::init())
         .setup(|_app| {
             // Force creation of the data dir on first launch.
             let _ = data_dir::data_dir();
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_data_dir, take_cli_launch_path])
+        .invoke_handler(tauri::generate_handler![
+            get_data_dir,
+            take_cli_launch_path,
+            start_watching,
+            stop_watching,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

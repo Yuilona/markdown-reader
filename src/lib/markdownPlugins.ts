@@ -3,6 +3,7 @@ import remarkMath from 'remark-math';
 import remarkFrontmatter from 'remark-frontmatter';
 import { remarkAlert } from 'remark-github-blockquote-alert';
 import rehypeKatex from 'rehype-katex';
+import rehypeSlug from 'rehype-slug';
 import rehypeShikiFromHighlighter from '@shikijs/rehype/core';
 import { createHighlighterCore } from 'shiki/core';
 import { createOnigurumaEngine } from 'shiki/engine/oniguruma';
@@ -73,8 +74,18 @@ export const remarkPlugins: PluggableList = [
 
 /** Rehype plugins (run on the hast). KaTeX must come BEFORE Shiki so
  * KaTeX can fail-soft on bad formulas without Shiki swallowing the
- * error (KaTeX inserts its own DOM, Shiki only touches `<code>`). */
+ * error (KaTeX inserts its own DOM, Shiki only touches `<code>`).
+ *
+ * `rehype-slug` adds a deterministic GitHub-flavor `id` attribute to
+ * every heading. Required by the link router (R7.4) so anchor links
+ * like `[top](#heading)` resolve via `document.getElementById`. Without
+ * this plugin, react-markdown emits headings WITHOUT ids and every
+ * anchor click silently no-ops.
+ */
 export const rehypePlugins: PluggableList = [
+  // R7.4 prerequisite: stamp deterministic ids on headings so the link
+  // router's anchor-scroll branch can find the target.
+  rehypeSlug,
   // R12.3: never throw on bad formulas — KaTeX renders a red-styled
   // .katex-error span containing the original source.
   [rehypeKatex, { throwOnError: false, errorColor: '#cc0000' }],
