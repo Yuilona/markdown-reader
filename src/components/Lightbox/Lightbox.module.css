@@ -85,7 +85,14 @@
 }
 
 /* Close button — fixed top-right of the overlay. Higher z-index than the
- * backdrop's own painted layers so it always sits clickable on top. */
+ * backdrop's own painted layers so it always sits clickable on top.
+ *
+ * Uses an OPAQUE dark pill (not a translucent white one) so it stays
+ * readable when the user zooms in and the light `--bg-canvas` card
+ * fills the whole viewport — a translucent-white-on-translucent-
+ * background button vanishes against light backgrounds. A subtle
+ * outer ring (box-shadow) adds extra separation if anything ever
+ * matches the button's bg color exactly. */
 .closeBtn {
   position: absolute;
   top: 16px;
@@ -93,22 +100,28 @@
   width: 40px;
   height: 40px;
   border: none;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(28, 28, 28, 0.92);
   color: #ffffff;
   font-size: 18px;
   line-height: 1;
   border-radius: 50%;
   cursor: pointer;
   z-index: 10000;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, transform 0.1s ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18), 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 .closeBtn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(60, 60, 60, 0.98);
+  transform: scale(1.05);
+}
+
+.closeBtn:active {
+  transform: scale(0.97);
 }
 
 .closeBtn:focus-visible {
