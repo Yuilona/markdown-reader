@@ -167,14 +167,19 @@ export function Mermaid({ source, onRequestFullscreen }: MermaidProps) {
     if (!svg) return;
 
     // Mermaid's output sets explicit width/height (often a fractional
-    // px value computed from its own layout pass). Stripping them and
-    // letting the SVG fill the container is what makes the diagram
-    // resize cleanly with the surrounding page width.
+    // px value computed from its own layout pass). Stripping them lets
+    // svg-pan-zoom take ownership of the viewBox math.
+    //
+    // We size the SVG element to fill its host container (.svgHost
+    // is height: 100% inside a fixed-height .container). With
+    // `fit: true, center: true` in svg-pan-zoom's options, this makes
+    // the diagram scale UP to fill small natural sizes and DOWN to fit
+    // oversized ones — predictable inline preview viewport.
     svg.removeAttribute('width');
     svg.removeAttribute('height');
     svg.style.width = '100%';
+    svg.style.height = '100%';
     svg.style.maxWidth = '100%';
-    svg.style.height = 'auto';
     svg.style.cursor = 'grab';
 
     let disposed = false;

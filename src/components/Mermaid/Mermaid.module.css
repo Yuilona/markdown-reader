@@ -19,30 +19,36 @@
   border: 1px solid var(--border-img-placeholder);
   border-radius: 6px;
   background: var(--bg-mermaid-container);
-  /* Per-user: doubled from the original 200px floor so wide diagrams
-   * have more breathing room inline before the user reaches for the
-   * fullscreen toolbar button. */
-  min-height: 400px;
+  /* FIXED height (not min-height) — gives the SVG host a definite
+   * parent height so its `height: 100%` resolves correctly. svg-pan-zoom
+   * with fit:true scales the diagram content to fill this viewport
+   * regardless of the diagram's natural size — small diagrams scale up
+   * to use the room, large diagrams scale down. The user reaches for
+   * the fullscreen toolbar button when 400px isn't enough. */
+  height: 400px;
   box-sizing: border-box;
   /* Render isolation so a deep zoom doesn't bleed shadows etc. into
      the surrounding markdown body. */
   overflow: hidden;
 }
 
-/* The wrapper Mermaid's SVG lives in. Sized by the SVG itself once
-   svg-pan-zoom attaches; we just keep the layout flow predictable. */
+/* The wrapper Mermaid's SVG lives in. Fills the container vertically
+ * AND horizontally so the SVG inside (sized to 100%/100% by Mermaid.tsx)
+ * has a definite parent to resolve its percentage height against. */
 .svgHost {
   width: 100%;
+  height: 100%;
   display: block;
 }
 
 .svgHost svg {
   display: block;
-  /* Mermaid sets its own width/height which we strip in JS; this
-     selector is the safety net for the moment between mount and
-     svg-pan-zoom attaching. */
+  /* Mermaid's intrinsic width/height attrs are stripped in JS; we then
+   * set width/height: 100% so the SVG fills the host. svg-pan-zoom
+   * fit:true scales the viewBox to use the full area. */
+  width: 100%;
+  height: 100%;
   max-width: 100%;
-  height: auto;
 }
 
 /* ---- Floating toolbar (R4.2). Hidden by default, fades in on hover. */

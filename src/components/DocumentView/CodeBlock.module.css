@@ -21,7 +21,15 @@
   margin: 16px 0;
 }
 
-.pre {
+/* Selector intentionally prefixed with `:global(.markdown-body)` so its
+ * specificity (0,0,2,0) MATCHES github-markdown-css's own rule
+ *   `.markdown-body pre { padding: var(--base-size-16) }` (= 16px)
+ * which would otherwise WIN by higher specificity and reset our
+ * carefully-reserved 36px top padding back to 16px, causing the Copy
+ * button + language label to overlap the first code line. With the
+ * tie now at 0,0,2,0, source order decides — our CSS Module is
+ * imported AFTER the vendor sheet (PR-6 fix), so we win cleanly. */
+:global(.markdown-body) .pre {
   margin: 0;
   /* Top padding reserves space for the floating toolbar (~28px tall at
    * top: 6px) so the first code line never disappears behind the Copy
