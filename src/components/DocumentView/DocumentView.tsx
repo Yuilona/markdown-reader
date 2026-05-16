@@ -12,15 +12,17 @@ import { handleLinkClick, useLinkRouter } from '../../lib/linkRouter';
 import type { LoadedDocument } from '../../lib/tauri';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
 
-import { CodeBlock } from './CodeBlock';
-import { Frontmatter } from './Frontmatter';
-import { ImageWithFallback } from './ImageWithFallback';
-import { Mermaid } from '../Mermaid/Mermaid';
-import { useLightbox } from '../Lightbox/LightboxContext';
-import styles from './DocumentView.module.css';
-
 // Vendor CSS pulled directly from node_modules — no copy in src/styles
 // per the PR-2 brief. Vite resolves these at bundle time.
+//
+// IMPORT ORDER MATTERS: vendor CSS MUST come BEFORE the CSS Module
+// `DocumentView.module.css`. Both `.markdown-body` (from
+// github-markdown-css) and our `.article` class are applied to the
+// same <article> element; with equal CSS specificity, the LATER
+// declaration wins. github-markdown-css explicitly sets
+// `.markdown-body { margin: 0 }`, which would otherwise cancel our
+// `.article { margin: 0 auto }` and the document would render
+// left-aligned instead of centered (R9.4). Keep these imports here.
 //
 // PR-6: switched from `github-markdown-light.css` to the COMBINED
 // `github-markdown.css`. The combined file ships `[data-theme='light']`
@@ -34,6 +36,13 @@ import styles from './DocumentView.module.css';
 import 'github-markdown-css/github-markdown.css';
 import 'katex/dist/katex.min.css';
 import 'remark-github-blockquote-alert/alert.css';
+
+import { CodeBlock } from './CodeBlock';
+import { Frontmatter } from './Frontmatter';
+import { ImageWithFallback } from './ImageWithFallback';
+import { Mermaid } from '../Mermaid/Mermaid';
+import { useLightbox } from '../Lightbox/LightboxContext';
+import styles from './DocumentView.module.css';
 
 interface DocumentViewProps {
   doc: LoadedDocument;
