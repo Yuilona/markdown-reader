@@ -90,8 +90,28 @@ export function Lightbox({ content, onClose }: LightboxProps) {
         // Generous range — fullscreen view encourages deep inspection.
         minZoom: 0.1,
         maxZoom: 20,
+        // User feedback: panzoom's default wheel zoom anchors at the
+        // cursor position, which means a small wheel tick near a corner
+        // sends the diagram flying out of viewport. Disable the default
+        // wheel handler (returning truthy from beforeWheel skips
+        // panzoom's own logic) and attach our own viewport-center-
+        // anchored handler below.
+        beforeWheel: () => true,
       });
       panZoomRef.current = pz;
+
+      // Custom wheel handler: zoom toward the VIEWPORT CENTER, not the
+      // cursor, with a controlled ~15% step. Result: the visible content
+      // stays roughly where it is on screen; the user can chain ticks
+      // for bigger jumps without their focal point drifting.
+      const wheelHandler = (e: WheelEvent) => {
+        e.preventDefault();
+        const cx = window.innerWidth / 2;
+        const cy = window.innerHeight / 2;
+        const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+        pz.smoothZoom(cx, cy, factor);
+      };
+      target.addEventListener('wheel', wheelHandler, { passive: false });
 
       // R5.4: dblclick → reset to identity transform. `moveTo(0,0)` +
       // `zoomAbs(0,0,1)` resets translation and scale; the clientX/Y
@@ -103,7 +123,10 @@ export function Lightbox({ content, onClose }: LightboxProps) {
         pz.zoomAbs(0, 0, 1);
       };
       target.addEventListener('dblclick', dblHandler);
-      dblCleanupRef.current = () => target.removeEventListener('dblclick', dblHandler);
+      dblCleanupRef.current = () => {
+        target.removeEventListener('wheel', wheelHandler);
+        target.removeEventListener('dblclick', dblHandler);
+      };
     });
 
     return () => {
