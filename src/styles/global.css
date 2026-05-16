@@ -44,4 +44,36 @@ button {
   min-height: 0;
   overflow: auto;
   background-color: #ffffff;
+  position: relative; /* anchor for the drop-error banner */
+}
+
+/*
+ * Drop-error banner (PR-5a). Floats at the top of `<main>` above any
+ * content. Auto-dismissed by the parent after 3s; the keyframe animation
+ * handles the fade in/out so the banner doesn't pop.
+ *
+ * PR-8 will replace this with a real toast system (R12.5 / R12.8).
+ */
+.dropErrorBanner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  padding: 8px 16px;
+  font-size: 13px;
+  color: #ffffff;
+  background: #d13438;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  user-select: none;
+  animation: dropErrorFade 3s ease forwards;
+}
+
+@keyframes dropErrorFade {
+  0% { opacity: 0; transform: translate(-50%, -8px); }
+  6% { opacity: 1; transform: translate(-50%, 0); }
+  94% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -8px); }
 }

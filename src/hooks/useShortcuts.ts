@@ -10,13 +10,12 @@ interface UseShortcutsOptions {
 /**
  * Global keyboard shortcuts hook.
  *
- * PR-2: Ctrl+O opens the dialog AND, if the caller passes
- * `onOpenDocument`, hands the loaded document back so App.tsx can
- * promote it to state. The callback is captured via a ref-equivalent
- * (re-binding the listener whenever it changes) so closures stay fresh
- * without the tear-down dance.
+ * Ctrl+O opens the dialog AND, if the caller passes `onOpenDocument`,
+ * hands the loaded document back so App.tsx can promote it to state.
  *
- * Additional shortcuts (R13 in PRD) land in later PRs.
+ * PR-5a: `openFileDialog` now funnels through `loadDocument`, so the
+ * recent-list is updated automatically. Additional shortcuts (R13 in
+ * PRD) land in later PRs.
  */
 export function useShortcuts(options: UseShortcutsOptions = {}): void {
   const { onOpenDocument } = options;

@@ -1,39 +1,32 @@
-import { useState } from 'react';
 import { openFileDialog, type LoadedDocument } from '../../lib/tauri';
+import { RecentList } from './RecentList';
 import styles from './EmptyState.module.css';
 
 interface EmptyStateProps {
-  /** Called with the loaded document when the user picks a file. */
+  /** Called with the loaded document when the user picks a file via dialog. */
   onOpen: (doc: LoadedDocument) => void;
+  /**
+   * Called when the user clicks a recent-list entry. App.tsx funnels this
+   * through `setDocFromPath` so recent-list bookkeeping happens centrally.
+   */
+  onPickRecent: (path: string) => void;
+  /**
+   * True when a file is currently being dragged over the window (driven
+   * by App.tsx's useDragDrop hook — see PR-5a brief §1). EmptyState
+   * mirrors it with a visual outline. We no longer wire HTML5 drag events
+   * here because Tauri 2 intercepts native drops before the DOM sees them.
+   */
+  isDragOver: boolean;
 }
 
-export function EmptyState({ onOpen }: EmptyStateProps) {
-  const [isDragOver, setIsDragOver] = useState(false);
-
-  // PR-1: visual-only drag-over feedback. Real drop handling is wired in PR-5.
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  };
-  const handleDragLeave = () => setIsDragOver(false);
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    // Real drop handling deferred to PR-5.
-  };
-
+export function EmptyState({ onOpen, onPickRecent, isDragOver }: EmptyStateProps) {
   const handleOpen = async () => {
     const doc = await openFileDialog();
     if (doc) onOpen(doc);
   };
 
   return (
-    <div
-      className={`${styles.container} ${isDragOver ? styles.dragOver : ''}`}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
+    <div className={`${styles.container} ${isDragOver ? styles.dragOver : ''}`}>
       <div className={styles.content}>
         <div className={styles.logo}>M</div>
         <p className={styles.hint}>拖拽 .md 文件到此处</p>
@@ -41,10 +34,7 @@ export function EmptyState({ onOpen }: EmptyStateProps) {
         <button type="button" className={styles.openBtn} onClick={handleOpen}>
           打开文件 (Ctrl+O)
         </button>
-        <div className={styles.recent}>
-          <p className={styles.recentTitle}>最近文件</p>
-          <p className={styles.recentEmpty}>暂无最近文件</p>
-        </div>
+        <RecentList onPick={onPickRecent} />
       </div>
     </div>
   );

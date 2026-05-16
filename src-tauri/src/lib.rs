@@ -1,6 +1,9 @@
 mod data_dir;
 
-use tauri::{Emitter, Manager};
+use std::path::PathBuf;
+use std::sync::Mutex;
+
+use tauri::{Emitter, Manager, State};
 
 /// Tauri command exposed to the frontend.
 /// Returns the absolute path of the portable data directory as a string.
@@ -9,13 +12,60 @@ fn get_data_dir() -> String {
     data_dir::data_dir().to_string_lossy().to_string()
 }
 
+/// Holds the CLI-launch markdown path (if any). Read by the frontend once
+/// on mount via `take_cli_launch_path`; the take semantics ensure we only
+/// open the file once even if hot-reload re-mounts the React tree.
+#[derive(Default)]
+struct CliLaunchState(Mutex<Option<String>>);
+
+#[tauri::command]
+fn take_cli_launch_path(state: State<'_, CliLaunchState>) -> Option<String> {
+    state.0.lock().ok().and_then(|mut g| g.take())
+}
+
+/// Extract the first non-flag argument that looks like a markdown file path
+/// and exists on disk. Returns `None` for the common "no file passed" case
+/// and for misconfigured associations that pass us a `.txt` or similar.
+///
+/// PR-5a: case-insensitive extension match (`.md` / `.markdown`). The
+/// existence check uses `try_exists` so a permission error doesn't panic.
+fn first_markdown_arg<I>(args: I) -> Option<PathBuf>
+where
+    I: IntoIterator<Item = String>,
+{
+    for arg in args.into_iter().skip(1) {
+        if arg.starts_with('-') {
+            continue;
+        }
+        let path = PathBuf::from(&arg);
+        let ext_ok = path
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|s| {
+                let lower = s.to_ascii_lowercase();
+                lower == "md" || lower == "markdown"
+            })
+            .unwrap_or(false);
+        if ext_ok && path.try_exists().unwrap_or(false) {
+            return Some(path);
+        }
+    }
+    None
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Capture the first-launch CLI path BEFORE building the app so the state
+    // is populated by the time `setup` runs.
+    let cli_path: Option<String> = first_markdown_arg(std::env::args())
+        .map(|p| p.to_string_lossy().to_string());
+
     tauri::Builder::default()
+        .manage(CliLaunchState(Mutex::new(cli_path)))
         // Single-instance plugin: when a second copy is launched, forward its
         // argv to the running window via a "second-instance" event and bring
-        // the window to the foreground. PR-5 will wire actual file open from
-        // this event; PR-1 just emits.
+        // the window to the foreground. PR-5a wires the frontend listener
+        // to actually load the file.
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
@@ -31,7 +81,7 @@ pub fn run() {
             let _ = data_dir::data_dir();
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_data_dir])
+        .invoke_handler(tauri::generate_handler![get_data_dir, take_cli_launch_path])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
