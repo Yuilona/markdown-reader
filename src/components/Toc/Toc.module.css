@@ -1,13 +1,16 @@
-/* Right-side TOC sidebar (R3.6, R14.2-R14.4).
+/* Left-side TOC sidebar (R3.6, R14.2-R14.4).
  *
- * Layout: position: fixed on the right edge of the viewport. Width 260px
+ * Layout: position: fixed on the LEFT edge of the viewport. Width 260px
  * (within R3.6's 240-280 band). Article column stays centered at 820px
  * regardless of the TOC's presence — on wide viewports the TOC sits in
- * the right margin; on narrow viewports it overlays the article's right
+ * the left margin; on narrow viewports it overlays the article's left
  * edge (which is mostly padding inside the 820px frame).
  *
- * z-index sits below the SearchBar (1000 vs 1100) so when both are open
- * the search bar's floating overlay stays on top per PR-7 Feature 3.
+ * Because the SearchBar lives top-right and the TOC lives top-left,
+ * the two overlays no longer collide visually. The `sidebarBelowSearch`
+ * and `openToggleBelowSearch` classes are kept for API stability (the
+ * Toc component still receives `searchOpen` from DocumentView) but
+ * intentionally don't shift anymore.
  *
  * Theme transitions are handled by the global rule in transitions.css
  * (color / background / border-color all fade together).
@@ -16,11 +19,11 @@
 .sidebar {
   position: fixed;
   top: 44px; /* 32px titlebar + 12px gap */
-  right: 12px;
+  left: 12px;
   width: 260px;
-  /* Sit just under the SearchBar's max possible vertical reach but tall
-   * enough to scroll most TOCs. Cap by viewport height with a small
-   * bottom gap so it doesn't kiss the window edge. */
+  /* Sit just under the titlebar and tall enough to scroll most TOCs.
+   * Cap by viewport height with a small bottom gap so it doesn't kiss
+   * the window edge. */
   max-height: calc(100vh - 64px);
   display: flex;
   flex-direction: column;
@@ -32,17 +35,14 @@
   font-size: 13px;
   color: var(--fg-default);
   overflow: hidden;
-  /* Smooth slide when the SearchBar opens/closes so the TOC shift
-   * doesn't feel jarring. Other transitions inherit from the global
-   * theme-transition rule which whitelists color/background/border. */
   transition: top 0.2s ease, max-height 0.2s ease;
 }
 
-/* PR-7 Feature 3: shift the TOC down when SearchBar is open so the
- * two overlays don't visually collide in the top-right corner. */
+/* Left+top: no offset needed when SearchBar opens (search is on the
+ * right). Kept as a no-op class so the Toc component's prop wiring
+ * stays unchanged. */
 .sidebarBelowSearch {
-  top: 92px; /* 32 titlebar + 12 gap + ~48 SearchBar height */
-  max-height: calc(100vh - 112px);
+  /* intentionally empty — TOC stays put when search opens */
 }
 
 .header {
@@ -92,6 +92,18 @@
   list-style: none;
   overflow-y: auto;
   flex: 1 1 auto;
+  /* Hide the visual scrollbar but keep wheel/touch scrolling functional.
+   * The user explicitly asked for no scrollbar — it looked unharmonious
+   * against the rounded panel. The contents are still fully reachable
+   * via wheel/keyboard/drag. */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge */
+}
+
+.list::-webkit-scrollbar {
+  display: none; /* Chromium / Safari / Tauri WebView2 */
+  width: 0;
+  height: 0;
 }
 
 /* Each TOC item is a button so we control the click handler ourselves
@@ -112,9 +124,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.5;
-  /* Slightly different transition than the global theme rule so the
-   * left-border indicator and hover feel snappy without competing with
-   * the 200ms theme fade. */
   transition: color 0.1s ease, border-color 0.1s ease, background-color 0.1s ease;
 }
 
@@ -139,24 +148,23 @@
   color: var(--accent);
 }
 
-/* On narrow viewports the TOC overlays the article's right edge. Add a
- * subtle inner shadow so it visually peels off the article. */
+/* On narrow viewports the TOC overlays the article's left edge. Add a
+ * subtle outer-right shadow so it visually peels off the article. */
 @media (max-width: 1100px) {
   .sidebar {
-    box-shadow: -4px 4px 16px rgba(0, 0, 0, 0.16);
+    box-shadow: 4px 4px 16px rgba(0, 0, 0, 0.16);
   }
 }
 
 /* --- "Open TOC" floating button (shown when panel is hidden) ---
  *
- * Same anchor / z-index pattern as the panel itself. Sized to read as
- * "secondary" affordance, not competing with the SearchBar's prominence.
+ * Same anchor / z-index pattern as the panel itself.
  */
 
 .openToggle {
   position: fixed;
   top: 44px;
-  right: 12px;
+  left: 12px;
   width: 32px;
   height: 32px;
   display: inline-flex;
@@ -184,6 +192,8 @@
   outline-offset: 1px;
 }
 
+/* No offset when SearchBar opens (search is on the right edge). Kept
+ * as a no-op for API stability. */
 .openToggleBelowSearch {
-  top: 92px;
+  /* intentionally empty */
 }
