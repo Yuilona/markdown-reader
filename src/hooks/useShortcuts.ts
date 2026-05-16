@@ -1,23 +1,19 @@
 import { useEffect } from 'react';
 import { openFileDialog, type LoadedDocument } from '../lib/tauri';
 import { useTheme } from '../components/ThemeProvider/useTheme';
-import type { ThemeMode } from '../lib/settings';
+import { nextMode } from '../components/ThemeProvider/themeCycle';
 
 interface UseShortcutsOptions {
   /** Invoked when Ctrl+O picks a file. Optional so PR-1-era callers
    *  (which only wanted the dialog to open) keep working. */
   onOpenDocument?: (doc: LoadedDocument) => void;
-}
-
-/**
- * Cycle order for Ctrl+T (R13). Mirrors the Titlebar button cycle.
- *   light → dark → system → light → ...
- */
-const THEME_CYCLE: ThemeMode[] = ['light', 'dark', 'system'];
-
-function nextMode(current: ThemeMode): ThemeMode {
-  const idx = THEME_CYCLE.indexOf(current);
-  return THEME_CYCLE[(idx + 1) % THEME_CYCLE.length];
+  /** PR-7: Ctrl+F handler. Opens the SearchBar — wired from App.tsx
+   *  via a state setter. When the bar is already open, the same
+   *  shortcut still fires and the consumer is responsible for
+   *  re-focusing + selecting the input. */
+  onOpenSearch?: () => void;
+  /** PR-7: Ctrl+\ handler. Toggles the TOC sidebar's visibility. */
+  onToggleToc?: () => void;
 }
 
 /**
@@ -25,9 +21,11 @@ function nextMode(current: ThemeMode): ThemeMode {
  *
  *   - `Ctrl+O` opens the native file dialog (R13).
  *   - `Ctrl+T` cycles the theme (R13, PR-6).
+ *   - `Ctrl+F` opens the search bar (R13, PR-7).
+ *   - `Ctrl+\` toggles the TOC sidebar (R13, PR-7).
  *
- * Additional shortcuts (R13: Ctrl+W close, Ctrl+P print, search, etc.)
- * land in later PRs.
+ * Additional shortcuts (R13: Ctrl+W close, Ctrl+P print, etc.) land in
+ * later PRs.
  *
  * PR-5a: `openFileDialog` now funnels through `loadDocument`, so the
  * recent-list is updated automatically.
@@ -35,9 +33,12 @@ function nextMode(current: ThemeMode): ThemeMode {
  * PR-6: this hook MUST be called from inside a `<ThemeProvider>` so the
  * Ctrl+T handler can read+set the current mode. App.tsx places it
  * inside the provider tree.
+ *
+ * PR-7: the `nextMode` helper + cycle constant are imported from
+ * `themeCycle.ts` (extracted in PR-7 — same source the Titlebar uses).
  */
 export function useShortcuts(options: UseShortcutsOptions = {}): void {
-  const { onOpenDocument } = options;
+  const { onOpenDocument, onOpenSearch, onToggleToc } = options;
   const { mode, setMode } = useTheme();
 
   useEffect(() => {
@@ -56,8 +57,25 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
         setMode(nextMode(mode));
         return;
       }
+      // Ctrl+F opens the search bar (R13, PR-7). We use `key === 'f'`
+      // so Shift+Ctrl+F (a hypothetical future "find all docs" shortcut)
+      // doesn't accidentally trip the same path — the modifier-strict
+      // gate above already requires no Shift.
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        if (onOpenSearch) onOpenSearch();
+        return;
+      }
+      // Ctrl+\ toggles TOC (R13, PR-7). The key string for backslash is
+      // literally '\' on every keyboard layout that has one — Windows
+      // delivers it as such regardless of locale.
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key === '\\') {
+        e.preventDefault();
+        if (onToggleToc) onToggleToc();
+        return;
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [onOpenDocument, mode, setMode]);
+  }, [onOpenDocument, onOpenSearch, onToggleToc, mode, setMode]);
 }

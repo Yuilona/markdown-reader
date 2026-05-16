@@ -1,3 +1,4 @@
+import { useFrontmatter } from './FrontmatterContext';
 import styles from './Frontmatter.module.css';
 
 interface FrontmatterProps {
@@ -9,20 +10,35 @@ interface FrontmatterProps {
  * Collapsible widget shown ABOVE the markdown body when the document has
  * YAML frontmatter (R3.5).
  *
- * Hidden by default; uses native `<details>` / `<summary>` so toggling
- * works without JS. The raw YAML is shown verbatim — parsing the value
- * into a definition list is overkill for v0.1, and most readers will
- * recognize the YAML form anyway.
+ * Hidden by default; uses native `<details>` / `<summary>` for the
+ * disclosure affordance, but the open state is lifted into
+ * `FrontmatterContext` (PR-7) so the SearchBar can read it for R8.10
+ * (search inside frontmatter only when expanded). The native `open`
+ * attribute is now driven from context state; `onToggle` keeps the two
+ * in sync if the user activates the disclosure via keyboard or
+ * accessibility tooling.
  *
  * Returns `null` when there is no frontmatter so the caller can render
  * unconditionally.
  */
 export function Frontmatter({ raw }: FrontmatterProps) {
   const trimmed = raw.trim();
+  const { isExpanded, setExpanded } = useFrontmatter();
   if (!trimmed) return null;
 
   return (
-    <details className={styles.details}>
+    <details
+      className={styles.details}
+      open={isExpanded}
+      onToggle={(e) => {
+        // Mirror the native `open` state back into context. We treat the
+        // DOM as authoritative here (rather than calling preventDefault
+        // and re-driving from React) so screen-reader / keyboard
+        // activation still works as expected — Chromium implements the
+        // disclosure toggle in the user agent.
+        setExpanded((e.currentTarget as HTMLDetailsElement).open);
+      }}
+    >
       <summary className={styles.summary}>
         <span className={styles.icon} aria-hidden="true">
           {/* Document-with-corner-fold glyph; conveys "metadata header". */}
@@ -35,7 +51,11 @@ export function Frontmatter({ raw }: FrontmatterProps) {
         </span>
         <span className={styles.label}>Frontmatter</span>
       </summary>
-      <pre className={styles.body}>
+      {/* `data-frontmatter-body`: marker used by the SearchBar's skip-
+        * selector logic. When `isExpanded` is false the SearchBar adds
+        * `[data-frontmatter-body]` to its skip list; when true it
+        * removes it so frontmatter text becomes searchable (R8.10). */}
+      <pre className={styles.body} data-frontmatter-body>
         <code>{trimmed}</code>
       </pre>
     </details>

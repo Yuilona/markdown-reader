@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef, type RefObject } from 'react';
 import Markdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import type { PluggableList } from 'unified';
@@ -39,13 +39,30 @@ import 'remark-github-blockquote-alert/alert.css';
 
 import { CodeBlock } from './CodeBlock';
 import { Frontmatter } from './Frontmatter';
+import { FrontmatterProvider } from './FrontmatterContext';
 import { ImageWithFallback } from './ImageWithFallback';
 import { Mermaid } from '../Mermaid/Mermaid';
 import { useLightbox } from '../Lightbox/LightboxContext';
+import { Toc } from '../Toc/Toc';
+import { SearchBar } from '../Search/SearchBar';
 import styles from './DocumentView.module.css';
 
 interface DocumentViewProps {
   doc: LoadedDocument;
+  /** PR-7: TOC sidebar visibility. Owned by App.tsx (so the Ctrl+\
+   *  shortcut can toggle it) and persisted to settings.json there. */
+  tocVisible: boolean;
+  /** PR-7: invoked when the user toggles the TOC panel (× button or
+   *  the floating open-toggle when closed). Flip the visibility +
+   *  persist to settings. */
+  onToggleToc: () => void;
+  /** PR-7: SearchBar visibility. Owned by App.tsx. */
+  searchOpen: boolean;
+  /** PR-7: invoked when the user closes the SearchBar via Esc / × button. */
+  onCloseSearch: () => void;
+  /** PR-7: ref to the SearchBar's input field, forwarded from App.tsx so
+   *  the Ctrl+F handler can re-focus + select on a second open. */
+  searchInputRef: RefObject<HTMLInputElement>;
 }
 
 /**
@@ -77,21 +94,42 @@ interface DocumentViewProps {
  * and debounce-saves on every scroll. The container element stays
  * mounted across watcher-fired re-renders, so external auto-reload
  * (R2.6) preserves the user's scroll position naturally.
+ *
+ * PR-7: mounts the TOC sidebar + SearchBar overlay. Both share the
+ * scrollRef (the IntersectionObserver's root, and the article-walk
+ * scope) and articleRef (the heading-extraction + match-walking root).
+ * FrontmatterProvider wraps the article so the SearchBar can read the
+ * frontmatter open-state for R8.10's "search frontmatter only when
+ * expanded" rule.
  */
 const rehypePluginsWithMermaid: PluggableList = [rehypeMermaidPretag, ...rehypePlugins];
 
-export function DocumentView({ doc }: DocumentViewProps) {
+export function DocumentView({
+  doc,
+  tocVisible,
+  onToggleToc,
+  searchOpen,
+  onCloseSearch,
+  searchInputRef,
+}: DocumentViewProps) {
   const { frontmatterRaw, body } = useMemo(() => {
     const split = splitFrontmatter(doc.text);
     if (split) return { frontmatterRaw: split.raw, body: split.body };
     return { frontmatterRaw: '', body: doc.text };
   }, [doc.text]);
 
-  // Scroll container ref — owned here, shared with the scroll-memory hook.
+  // Scroll container ref — owned here, shared with the scroll-memory hook,
+  // the TOC observer's `root`, and the SearchBar (indirectly, via the
+  // articleRef descendant).
   // The element it points to is stable across `doc.text` changes (the
   // watcher reload re-renders children but keeps `.scrollArea` mounted),
   // so the scroll Y survives the swap naturally.
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Article ref — root for heading extraction (TOC) AND match walking
+  // (SearchBar). Pointing at the same `<article>` element keeps both
+  // features scope-consistent: neither one sees Mermaid/KaTeX subtrees
+  // outside the article body.
+  const articleRef = useRef<HTMLElement | null>(null);
   useScrollMemory(scrollRef, doc.path);
 
   // Pull the lightbox opener + link router context once at the component
@@ -99,7 +137,7 @@ export function DocumentView({ doc }: DocumentViewProps) {
   // values are stabilized with `useCallback`/`useMemo` so the factory
   // memo holds across re-renders → the markdown pipeline doesn't re-run
   // on every parent render.
-  const { open } = useLightbox();
+  const { open, isOpen: lightboxOpen } = useLightbox();
   const linkRouter = useLinkRouter();
   const docDir = useMemo(() => dirname(doc.path), [doc.path]);
   const docPath = doc.path;
@@ -124,19 +162,59 @@ export function DocumentView({ doc }: DocumentViewProps) {
     [open, onLinkClick, docDir],
   );
 
+  // Re-extraction trigger for TOC + re-walk trigger for SearchBar. We
+  // need a value that changes whenever the article DOM has been
+  // replaced: doc swap (`doc.path`) OR watcher reload (`doc.text`).
+  //
+  // The dep array `[doc.path, doc.text]` already covers both cases:
+  // `loadDocument` always returns a fresh `LoadedDocument`, so on every
+  // reload the `doc.text` reference is new — even when the file
+  // contents happen to be identical. Using a monotonic counter (bumped
+  // each time the memo re-runs) produces a small, distinct string for
+  // every load, which downstream `useEffect`s key off cheaply. This
+  // sidesteps the "identical length but different content" trap that a
+  // `${path}::${length}` key would silently ignore.
+  const versionCounterRef = useRef(0);
+  const tocVersionKey = useMemo(
+    () => {
+      versionCounterRef.current += 1;
+      return `${doc.path}::${versionCounterRef.current}`;
+    },
+    [doc.path, doc.text],
+  );
+
   return (
-    <div ref={scrollRef} className={styles.scrollArea}>
-      <article className={`${styles.article} markdown-body`}>
-        <Frontmatter raw={frontmatterRaw} />
-        <Markdown
-          remarkPlugins={remarkPlugins}
-          rehypePlugins={rehypePluginsWithMermaid}
-          components={components}
-        >
-          {body}
-        </Markdown>
-      </article>
-    </div>
+    <FrontmatterProvider resetKey={doc.path}>
+      <div ref={scrollRef} className={styles.scrollArea}>
+        <article ref={articleRef} className={`${styles.article} markdown-body`}>
+          <Frontmatter raw={frontmatterRaw} />
+          <Markdown
+            remarkPlugins={remarkPlugins}
+            rehypePlugins={rehypePluginsWithMermaid}
+            components={components}
+          >
+            {body}
+          </Markdown>
+        </article>
+      </div>
+      <Toc
+        articleRef={articleRef}
+        scrollRef={scrollRef}
+        versionKey={tocVersionKey}
+        visible={tocVisible}
+        onClose={onToggleToc}
+        onOpen={onToggleToc}
+        searchOpen={searchOpen}
+      />
+      <SearchBar
+        articleRef={articleRef}
+        open={searchOpen}
+        onClose={onCloseSearch}
+        lightboxOpen={lightboxOpen}
+        inputRef={searchInputRef}
+        versionKey={tocVersionKey}
+      />
+    </FrontmatterProvider>
   );
 }
 

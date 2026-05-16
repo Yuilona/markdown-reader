@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Titlebar } from './components/Titlebar/Titlebar';
 import { EmptyState } from './components/EmptyState/EmptyState';
 import { DocumentView } from './components/DocumentView/DocumentView';
@@ -15,6 +15,12 @@ import { loadDocument, type LoadedDocument } from './lib/tauri';
 import { cleanupStaleTemp } from './lib/recentFiles';
 import { loadUserCss } from './lib/userCss';
 import { LinkRouterContext, type LinkRouterContextValue } from './lib/linkRouter';
+import {
+  DEFAULT_SETTINGS,
+  readSettings,
+  writeSettings,
+  type Settings,
+} from './lib/settings';
 
 const DROP_ERROR_MS = 3000;
 const DROP_ERROR_TEXT = '无法打开：仅支持 .md / .markdown 文件';
@@ -47,6 +53,40 @@ function AppContent() {
   const [doc, setDoc] = useState<LoadedDocument | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [dropError, setDropError] = useState<string | null>(null);
+
+  // ---- PR-7: TOC visibility + SearchBar visibility. ----
+  //
+  // Both pieces of UI are document-scoped (they only render inside
+  // DocumentView), but the keyboard shortcuts that toggle them live in
+  // `useShortcuts` at the App level. Lifting the state here lets the
+  // shortcut callbacks flip it while DocumentView still reads + renders
+  // the actual components.
+  //
+  // TOC default comes from settings.showTocByDefault (R10.2). We start
+  // with the DEFAULT_SETTINGS value, then promote to the persisted one
+  // once readSettings() resolves — same pattern ThemeProvider uses.
+  const [tocVisible, setTocVisible] = useState<boolean>(DEFAULT_SETTINGS.showTocByDefault);
+  const [searchOpen, setSearchOpen] = useState(false);
+  // Cached settings snapshot so toggle writes preserve other fields
+  // (theme, pageZoom) that App.tsx doesn't own.
+  const persistedSettingsRef = useRef<Settings>(DEFAULT_SETTINGS);
+  // Forwarded to SearchBar — lets the Ctrl+F handler re-focus and
+  // select the input when the bar is already open.
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Initial settings load → promote tocVisible to persisted value.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const settings = await readSettings();
+      if (cancelled) return;
+      persistedSettingsRef.current = settings;
+      setTocVisible(settings.showTocByDefault);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const showError = useCallback((message: string) => {
     // Re-trigger by clearing first so a second consecutive invalid drop
@@ -105,9 +145,50 @@ function AppContent() {
     return () => window.clearTimeout(id);
   }, [dropError]);
 
-  // Wire Ctrl+O. The shortcut returns a LoadedDocument (recent already
-  // updated by openFileDialog → loadDocument); we just promote it.
-  useShortcuts({ onOpenDocument: setDoc });
+  // PR-7: Ctrl+F handler. When the bar is already open, re-focus +
+  // select the input so the user can re-type to replace their previous
+  // query immediately.
+  const handleOpenSearch = useCallback(() => {
+    setSearchOpen((prev) => {
+      if (prev) {
+        // Already open — re-focus + select.
+        requestAnimationFrame(() => {
+          searchInputRef.current?.focus();
+          searchInputRef.current?.select();
+        });
+        return prev;
+      }
+      return true;
+    });
+  }, []);
+
+  // PR-7: Ctrl+\ handler. Toggles AND persists. We persist the same
+  // way ThemeProvider does: round-trip the cached settings so we don't
+  // clobber theme / pageZoom.
+  const handleToggleToc = useCallback(() => {
+    setTocVisible((prev) => {
+      const next = !prev;
+      const updated: Settings = {
+        ...persistedSettingsRef.current,
+        showTocByDefault: next,
+      };
+      persistedSettingsRef.current = updated;
+      void writeSettings(updated).catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn('[markdown-reader] failed to persist showTocByDefault:', err);
+      });
+      return next;
+    });
+  }, []);
+
+  // Wire Ctrl+O / Ctrl+T / Ctrl+F / Ctrl+\. The shortcut returns a
+  // LoadedDocument for Ctrl+O (recent already updated by openFileDialog
+  // → loadDocument); we just promote it.
+  useShortcuts({
+    onOpenDocument: setDoc,
+    onOpenSearch: handleOpenSearch,
+    onToggleToc: handleToggleToc,
+  });
 
   // Wire drag-drop at the webview level.
   useDragDrop({
@@ -148,6 +229,16 @@ function AppContent() {
     [setDocFromPath, showError],
   );
 
+  // PR-7: close the SearchBar when there's no document — the bar is
+  // useless without an article to walk. Reset on doc change too: a fresh
+  // document means the previously-wrapped marks (which were in the
+  // outgoing doc's tree) are gone.
+  useEffect(() => {
+    if (!doc) setSearchOpen(false);
+  }, [doc]);
+
+  const handleCloseSearch = useCallback(() => setSearchOpen(false), []);
+
   // LightboxProvider wraps the main content so DocumentView's Mermaid
   // toolbar + image click can dispatch open(). LinkRouterContext wraps
   // it for the same reason on the `<a>` override.
@@ -159,7 +250,14 @@ function AppContent() {
           <main className="app-main">
             {dropError && <DropErrorBanner message={dropError} />}
             {doc ? (
-              <DocumentView doc={doc} />
+              <DocumentView
+                doc={doc}
+                tocVisible={tocVisible}
+                onToggleToc={handleToggleToc}
+                searchOpen={searchOpen}
+                onCloseSearch={handleCloseSearch}
+                searchInputRef={searchInputRef}
+              />
             ) : (
               <EmptyState
                 onOpen={setDoc}

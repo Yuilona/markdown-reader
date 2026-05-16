@@ -1,0 +1,189 @@
+/* Right-side TOC sidebar (R3.6, R14.2-R14.4).
+ *
+ * Layout: position: fixed on the right edge of the viewport. Width 260px
+ * (within R3.6's 240-280 band). Article column stays centered at 820px
+ * regardless of the TOC's presence — on wide viewports the TOC sits in
+ * the right margin; on narrow viewports it overlays the article's right
+ * edge (which is mostly padding inside the 820px frame).
+ *
+ * z-index sits below the SearchBar (1000 vs 1100) so when both are open
+ * the search bar's floating overlay stays on top per PR-7 Feature 3.
+ *
+ * Theme transitions are handled by the global rule in transitions.css
+ * (color / background / border-color all fade together).
+ */
+
+.sidebar {
+  position: fixed;
+  top: 44px; /* 32px titlebar + 12px gap */
+  right: 12px;
+  width: 260px;
+  /* Sit just under the SearchBar's max possible vertical reach but tall
+   * enough to scroll most TOCs. Cap by viewport height with a small
+   * bottom gap so it doesn't kiss the window edge. */
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  font-size: 13px;
+  color: var(--fg-default);
+  overflow: hidden;
+  /* Smooth slide when the SearchBar opens/closes so the TOC shift
+   * doesn't feel jarring. Other transitions inherit from the global
+   * theme-transition rule which whitelists color/background/border. */
+  transition: top 0.2s ease, max-height 0.2s ease;
+}
+
+/* PR-7 Feature 3: shift the TOC down when SearchBar is open so the
+ * two overlays don't visually collide in the top-right corner. */
+.sidebarBelowSearch {
+  top: 92px; /* 32 titlebar + 12 gap + ~48 SearchBar height */
+  max-height: calc(100vh - 112px);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px 8px 14px;
+  border-bottom: 1px solid var(--border-muted);
+  flex: 0 0 auto;
+}
+
+.title {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+}
+
+.closeBtn {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 0;
+}
+
+.closeBtn:hover {
+  background: var(--bg-hover);
+  color: var(--fg-default);
+}
+
+.closeBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.list {
+  margin: 0;
+  padding: 6px 0;
+  list-style: none;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+/* Each TOC item is a button so we control the click handler ourselves
+ * (smooth scroll + observer-state update). Visual styling is anchor-
+ * like: subtle on rest, accent on hover/current. */
+.item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-left: 2px solid transparent;
+  padding: 4px 10px 4px 8px;
+  color: var(--fg-muted);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.5;
+  /* Slightly different transition than the global theme rule so the
+   * left-border indicator and hover feel snappy without competing with
+   * the 200ms theme fade. */
+  transition: color 0.1s ease, border-color 0.1s ease, background-color 0.1s ease;
+}
+
+.item:hover {
+  background: var(--bg-hover);
+  color: var(--fg-default);
+}
+
+.item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.current {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  font-weight: 600;
+  background: var(--accent-bg-soft);
+}
+
+.current:hover {
+  color: var(--accent);
+}
+
+/* On narrow viewports the TOC overlays the article's right edge. Add a
+ * subtle inner shadow so it visually peels off the article. */
+@media (max-width: 1100px) {
+  .sidebar {
+    box-shadow: -4px 4px 16px rgba(0, 0, 0, 0.16);
+  }
+}
+
+/* --- "Open TOC" floating button (shown when panel is hidden) ---
+ *
+ * Same anchor / z-index pattern as the panel itself. Sized to read as
+ * "secondary" affordance, not competing with the SearchBar's prominence.
+ */
+
+.openToggle {
+  position: fixed;
+  top: 44px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 0;
+  z-index: 1000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: top 0.2s ease, color 0.1s ease, background-color 0.1s ease,
+    border-color 0.1s ease;
+}
+
+.openToggle:hover {
+  background: var(--bg-hover);
+  color: var(--fg-default);
+}
+
+.openToggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.openToggleBelowSearch {
+  top: 92px;
+}

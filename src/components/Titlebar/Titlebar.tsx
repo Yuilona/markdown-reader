@@ -1,18 +1,8 @@
 import { minimize, toggleMaximize, closeWindow } from '../../lib/tauri';
 import { useTheme } from '../ThemeProvider/useTheme';
+import { nextMode } from '../ThemeProvider/themeCycle';
 import type { ThemeMode } from '../../lib/settings';
 import styles from './Titlebar.module.css';
-
-/**
- * Cycle order for the theme toggle (R13 Ctrl+T + Titlebar button).
- *   light → dark → system → light → ...
- */
-const THEME_CYCLE: ThemeMode[] = ['light', 'dark', 'system'];
-
-function nextMode(current: ThemeMode): ThemeMode {
-  const idx = THEME_CYCLE.indexOf(current);
-  return THEME_CYCLE[(idx + 1) % THEME_CYCLE.length];
-}
 
 /** Per-mode glyph + Chinese tooltip text shown on the button. */
 function tooltipFor(mode: ThemeMode): string {

@@ -33,6 +33,11 @@ interface LightboxContextValue {
   open: (content: LightboxContent) => void;
   /** Close the lightbox. No-op if already closed. */
   close: () => void;
+  /** PR-7: true while the overlay is showing content. Used by SearchBar's
+   *  Esc handler to defer to the Lightbox's own Esc handler when both
+   *  are open (the user expects one Esc press to close the topmost
+   *  surface, not both at once). */
+  isOpen: boolean;
 }
 
 const LightboxContext = createContext<LightboxContextValue | null>(null);
@@ -71,8 +76,13 @@ export function LightboxProvider({ children }: { children: ReactNode }) {
   const close = useCallback(() => setContent(null), []);
 
   // Stable context value across renders that don't change open/close
-  // identity — avoids forcing every consumer to re-render.
-  const value = useMemo<LightboxContextValue>(() => ({ open, close }), [open, close]);
+  // identity — avoids forcing every consumer to re-render. `isOpen`
+  // flips whenever content does, which is exactly the signal SearchBar
+  // needs to gate its Esc handler (PR-7).
+  const value = useMemo<LightboxContextValue>(
+    () => ({ open, close, isOpen: content !== null }),
+    [open, close, content],
+  );
 
   return (
     <LightboxContext.Provider value={value}>
