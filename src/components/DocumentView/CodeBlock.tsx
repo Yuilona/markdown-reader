@@ -15,6 +15,10 @@ interface CodeBlockProps {
   /** Children passed by react-markdown for the `<pre>` override:
    *  always the inner `<code>` React element (post-Shiki). */
   children?: ReactNode;
+  /** v1.0: 1-indexed body source line, forwarded from the hast node so
+   *  the wrapper carries `data-source-line` for editor↔preview line sync
+   *  (Shiki strips it off the <pre> itself). */
+  sourceLine?: number;
 }
 
 /**
@@ -29,7 +33,7 @@ interface CodeBlockProps {
  *     and the Copy button (fades in on hover).
  *   - The Copy success state shows a check mark for 1500ms.
  */
-export function CodeBlock({ children }: CodeBlockProps) {
+export function CodeBlock({ children, sourceLine }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   // PR-8: route copy failures through the toast system (R12.5, R12.8).
   const toast = useToast();
@@ -79,7 +83,7 @@ export function CodeBlock({ children }: CodeBlockProps) {
   };
 
   return (
-    <div className={styles.wrapper}>
+    <div className={styles.wrapper} data-source-line={sourceLine}>
       <div className={styles.toolbar}>
         {language && <span className={styles.lang}>{language}</span>}
         <button

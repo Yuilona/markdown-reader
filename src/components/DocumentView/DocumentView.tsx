@@ -6,7 +6,7 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 
 import { remarkPlugins, rehypePlugins } from '../../lib/markdownPlugins';
 import { rehypeMermaidPretag } from '../../lib/rehypeMermaidPretag';
-import { rehypeSourceLine } from '../../lib/rehypeSourceLine';
+import { rehypeSourceLine, rehypeSourceLineApply, readSourceLine } from '../../lib/rehypeSourceLine';
 import { splitFrontmatter } from '../../lib/parseFrontmatter';
 import { dirname, normalizePath } from '../../lib/pathUtils';
 import { handleLinkClick, useLinkRouter } from '../../lib/linkRouter';
@@ -122,6 +122,9 @@ const rehypePluginsWithMermaid: PluggableList = [
   rehypeSourceLine,
   rehypeMermaidPretag,
   ...rehypePlugins,
+  // Runs AFTER Shiki to re-stamp code blocks whose <pre> Shiki replaced
+  // (and whose position it dropped). See rehypeSourceLine.ts.
+  rehypeSourceLineApply,
 ];
 
 export function DocumentView({
@@ -210,7 +213,11 @@ export function DocumentView({
     (e: React.MouseEvent) => {
       if (!editTextProvided) return;
       const targetEl = e.target as HTMLElement;
-      if (targetEl.closest('a, img, button, input, .mermaid-host, [data-no-search]')) {
+      // Skip genuinely interactive targets (links, images, the code/mermaid
+      // toolbar buttons) so we don't fight their own handlers. We DON'T
+      // skip code blocks / mermaid / tables themselves — clicking their
+      // body should still jump to the source line.
+      if (targetEl.closest('a, img, button, input')) {
         return;
       }
       const block = targetEl.closest('[data-source-line]');
@@ -508,15 +515,21 @@ function buildComponents(opts: BuildComponentsOptions): Components {
           : typeof props?.dataMermaidSource === 'string'
             ? props.dataMermaidSource
             : null;
+      // Source line stamped by rehypeSourceLine / rehypeSourceLineApply.
+      // We re-emit it onto the component's wrapper so editor↔preview line
+      // sync covers code blocks + mermaid (whose own <pre> rendering would
+      // otherwise drop the attribute).
+      const sourceLine = readSourceLine(node?.properties as Record<string, unknown> | undefined);
       if (mermaidSource !== null) {
         return (
           <Mermaid
             source={mermaidSource}
+            sourceLine={sourceLine}
             onRequestFullscreen={(svg) => openLightbox({ kind: 'svg', svg })}
           />
         );
       }
-      return <CodeBlock>{children}</CodeBlock>;
+      return <CodeBlock sourceLine={sourceLine}>{children}</CodeBlock>;
     },
     input: ({ ...props }) => {
       // GFM task list items render as <input type="checkbox">. Force them

@@ -36,6 +36,10 @@ interface MermaidProps {
    * Fullscreen button is a no-op (with a debug log).
    */
   onRequestFullscreen?: (svg: string) => void;
+  /** v1.0: 1-indexed body source line, forwarded from the hast node so
+   *  the container carries `data-source-line` for editor↔preview line
+   *  sync (the diagram's own rendering would otherwise drop it). */
+  sourceLine?: number;
 }
 
 type RenderState =
@@ -73,7 +77,7 @@ type RenderState =
  *   this subtree before scanning for matches. KaTeX nodes will get the
  *   same treatment.
  */
-export function Mermaid({ source, onRequestFullscreen }: MermaidProps) {
+export function Mermaid({ source, onRequestFullscreen, sourceLine }: MermaidProps) {
   // PR-6: subscribe to the app theme so the cache key + future re-renders
   // pick up the active palette. Reading at the top of render keeps the
   // value stable for THIS render pass; the cache-key dependency in the
@@ -353,6 +357,7 @@ export function Mermaid({ source, onRequestFullscreen }: MermaidProps) {
       <div
         className={`${styles.container} ${styles.skeleton} mermaid-host`}
         data-no-search
+        data-source-line={sourceLine}
         aria-busy="true"
         aria-label="加载 Mermaid 图…"
       >
@@ -364,7 +369,11 @@ export function Mermaid({ source, onRequestFullscreen }: MermaidProps) {
   // ---- Per-block error fallback (R4.5).
   if (state.kind === 'error') {
     return (
-      <div className={`${styles.container} ${styles.error} mermaid-host`} data-no-search>
+      <div
+        className={`${styles.container} ${styles.error} mermaid-host`}
+        data-no-search
+        data-source-line={sourceLine}
+      >
         <div className={styles.errorTitle}>Mermaid 渲染失败</div>
         <pre className={styles.errorMessage}>{state.message}</pre>
         <details>
@@ -386,6 +395,7 @@ export function Mermaid({ source, onRequestFullscreen }: MermaidProps) {
       ref={containerRef}
       className={`${styles.container} mermaid-host`}
       data-no-search
+      data-source-line={sourceLine}
       onContextMenu={handleContextMenu}
     >
       <div

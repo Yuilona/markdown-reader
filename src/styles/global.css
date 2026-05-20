@@ -56,12 +56,32 @@ button {
  * a CodeMirror line decoration). The colour is theme-aware via a var. */
 :root {
   --line-flash-bg: rgba(9, 105, 218, 0.18);
+  --line-flash-ring: rgba(9, 105, 218, 0.55);
 }
 [data-theme='dark'] {
   --line-flash-bg: rgba(56, 139, 253, 0.28);
+  --line-flash-ring: rgba(56, 139, 253, 0.7);
 }
 
-@keyframes md-line-flash {
+/* Preview block flash: a background tint PLUS a box-shadow ring. The ring
+ * is what makes it visible on blocks with their own opaque background —
+ * code blocks (Shiki), tables, mermaid diagrams — where a background-only
+ * flash would be hidden behind the content. */
+@keyframes md-line-flash-ring {
+  0%,
+  45% {
+    background-color: var(--line-flash-bg);
+    box-shadow: 0 0 0 3px var(--line-flash-ring);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0);
+  }
+}
+
+/* Editor line flash: background only (the .cm-line is transparent, and a
+ * ring around a single text line would look odd). */
+@keyframes md-line-flash-bg {
   0%,
   45% {
     background-color: var(--line-flash-bg);
@@ -72,12 +92,12 @@ button {
 }
 
 .source-line-flash {
-  animation: md-line-flash 2s ease-out;
-  border-radius: 3px;
+  animation: md-line-flash-ring 2s ease-out;
+  border-radius: 4px;
 }
 
 .cm-line.cm-flashLine {
-  animation: md-line-flash 2s ease-out;
+  animation: md-line-flash-bg 2s ease-out;
 }
 
 /*
