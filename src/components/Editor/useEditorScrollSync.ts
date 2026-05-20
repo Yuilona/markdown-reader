@@ -44,7 +44,7 @@ function flashElement(el: HTMLElement): void {
   el.classList.remove('source-line-flash');
   void el.offsetWidth; // force reflow so the animation replays
   el.classList.add('source-line-flash');
-  window.setTimeout(() => el.classList.remove('source-line-flash'), 900);
+  window.setTimeout(() => el.classList.remove('source-line-flash'), 2000);
 }
 
 export function useEditorScrollSync({

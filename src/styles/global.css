@@ -62,7 +62,8 @@ button {
 }
 
 @keyframes md-line-flash {
-  0% {
+  0%,
+  45% {
     background-color: var(--line-flash-bg);
   }
   100% {
@@ -71,12 +72,12 @@ button {
 }
 
 .source-line-flash {
-  animation: md-line-flash 0.9s ease-out;
+  animation: md-line-flash 2s ease-out;
   border-radius: 3px;
 }
 
 .cm-line.cm-flashLine {
-  animation: md-line-flash 0.9s ease-out;
+  animation: md-line-flash 2s ease-out;
 }
 
 /*

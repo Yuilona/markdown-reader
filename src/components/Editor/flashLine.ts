@@ -43,7 +43,8 @@ export const flashLineExtension = flashLineField;
 
 /**
  * Move the cursor to `lineNum` (1-indexed, clamped), center it, focus the
- * editor, and flash-highlight the line for ~900ms.
+ * editor, and flash-highlight the line for ~2s (matches the CSS animation
+ * duration in global.css).
  */
 export function flashEditorLine(view: EditorView, lineNum: number): void {
   const total = view.state.doc.lines;
@@ -61,5 +62,5 @@ export function flashEditorLine(view: EditorView, lineNum: number): void {
     } catch {
       // editor unmounted — nothing to clear.
     }
-  }, 900);
+  }, 2000);
 }
