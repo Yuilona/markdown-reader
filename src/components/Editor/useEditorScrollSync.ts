@@ -88,9 +88,16 @@ export function useEditorScrollSync({
       }
 
       if (scrollSync) {
-        const containerTop = scroller.getBoundingClientRect().top;
-        const elTop = target.getBoundingClientRect().top;
-        scroller.scrollTop += elTop - containerTop;
+        // Center the target block in the preview viewport (rather than
+        // top-aligning it) so the flashed block sits where the eye is
+        // already looking. Clamped implicitly by the scroll bounds, so
+        // blocks near the top/bottom of the doc just scroll as far as
+        // they can.
+        const containerRect = scroller.getBoundingClientRect();
+        const elRect = target.getBoundingClientRect();
+        const delta =
+          elRect.top - containerRect.top - (containerRect.height / 2 - elRect.height / 2);
+        scroller.scrollTop += delta;
       }
       flashElement(target);
     };
