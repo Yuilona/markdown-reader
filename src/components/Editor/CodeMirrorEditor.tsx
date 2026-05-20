@@ -114,6 +114,13 @@ function CodeMirrorEditor({ value, onChange }: CodeMirrorEditorProps) {
         onChange={onChange}
         extensions={extensions}
         basicSetup={basicSetup}
+        // `theme="none"` is required: @uiw/react-codemirror defaults the
+        // `theme` prop to 'light' and injects its OWN light EditorView.theme,
+        // which would override our github light/dark palette from
+        // `themeExtension(effective)` (the editor would stay light even
+        // after a dark-mode toggle). With 'none', our extension is the
+        // sole theme source and the dark flip takes effect.
+        theme="none"
         height="100%"
         style={{ height: '100%' }}
       />
