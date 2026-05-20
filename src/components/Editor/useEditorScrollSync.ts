@@ -1,36 +1,33 @@
 import { useEffect, useRef, type RefObject } from 'react';
 
 /**
- * One-way scroll sync: editor cursor line → preview scroll (v1.0 PR-B,
- * R-EDIT-4.2/4.3).
+ * Editor cursor → preview sync (v1.0, R-EDIT-4 + bidirectional line sync).
  *
- * When the editor cursor moves to a new line, we scroll the preview so
- * the matching block aligns to the top of the preview's scroll area. The
- * sync is editor→preview ONLY (R-EDIT-4.2): scrolling the preview never
- * moves the editor, which avoids the feedback loop a bidirectional sync
- * would create.
+ * When the editor cursor moves to a new line we locate the matching
+ * preview block (via the `data-source-line` stamps from rehypeSourceLine)
+ * and:
+ *   - briefly flash-highlight it (`.source-line-flash`) so the eye can
+ *     find the corresponding rendered line — this is the editor→preview
+ *     half of the click-to-highlight feature, and runs whenever edit mode
+ *     is active.
+ *   - scroll it to the top of the preview, but ONLY when
+ *     `settings.editor.scrollSync` is on.
  *
- * Mapping (R-EDIT-4.3):
- *   - The editor cursor line is relative to the full buffer; subtract
- *     `lineOffset` (frontmatter lines) to get the BODY line that the
- *     rehypeSourceLine stamps use.
- *   - Find the block whose `data-source-line` is the largest value ≤ the
- *     target body line ("closest preceding block"). This handles cursor
- *     positions inside elements that weren't stamped (code blocks,
- *     list-item children) by snapping to the nearest stamped ancestor
- *     block above.
+ * Editor→preview only (no reverse): the preview→editor direction is a
+ * click handler in DocumentView that calls `jumpToEditorLine`.
  *
- * We align via manual `scrollTop` math rather than `scrollIntoView` so
- * the sync only ever touches the preview's own scroll container — no
- * surprise scrolling of the window or the titlebar.
+ * Mapping: the cursor line is full-buffer; subtract `lineOffset`
+ * (frontmatter lines) to get the BODY line the stamps use, then take the
+ * block whose `data-source-line` is the largest value ≤ the target.
  *
- * Debounced 50ms so a held arrow key / fast typing burst coalesces into
- * one scroll instead of one per keystroke (R-EDIT, Technical Notes).
+ * Debounced 50ms so a held arrow key / line-spanning edit coalesces.
  */
 
 interface ScrollSyncOptions {
-  /** Edit mode AND settings.editor.scrollSync. */
-  enabled: boolean;
+  /** Edit mode active (preview is the split right pane). */
+  editActive: boolean;
+  /** settings.editor.scrollSync — gates the scroll, not the flash. */
+  scrollSync: boolean;
   /** Preview scroll container. */
   scrollRef: RefObject<HTMLElement | null>;
   /** Article root to query `[data-source-line]` within. */
@@ -41,8 +38,18 @@ interface ScrollSyncOptions {
   lineOffset: number;
 }
 
+/** Add the flash class, restarting the CSS animation if it's already
+ *  present (remove → reflow → add), then strip it after the animation. */
+function flashElement(el: HTMLElement): void {
+  el.classList.remove('source-line-flash');
+  void el.offsetWidth; // force reflow so the animation replays
+  el.classList.add('source-line-flash');
+  window.setTimeout(() => el.classList.remove('source-line-flash'), 900);
+}
+
 export function useEditorScrollSync({
-  enabled,
+  editActive,
+  scrollSync,
   scrollRef,
   articleRef,
   cursorLine,
@@ -51,7 +58,7 @@ export function useEditorScrollSync({
   const timerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!enabled || cursorLine == null) return;
+    if (!editActive || cursorLine == null) return;
 
     const run = () => {
       const scroller = scrollRef.current;
@@ -59,16 +66,14 @@ export function useEditorScrollSync({
       if (!scroller || !article) return;
 
       const bodyLine = cursorLine - lineOffset;
-      let target: HTMLElement | null = null;
-
       if (bodyLine <= 1) {
-        // Cursor at/above the first body line → top of preview.
-        scroller.scrollTo({ top: 0 });
+        if (scrollSync) scroller.scrollTo({ top: 0 });
         return;
       }
 
       const nodes = article.querySelectorAll<HTMLElement>('[data-source-line]');
       let bestLine = -1;
+      let target: HTMLElement | null = null;
       for (const el of nodes) {
         const ln = Number(el.getAttribute('data-source-line'));
         if (!Number.isFinite(ln)) continue;
@@ -77,16 +82,17 @@ export function useEditorScrollSync({
           target = el;
         }
       }
-
       if (!target) {
-        scroller.scrollTo({ top: 0 });
+        if (scrollSync) scroller.scrollTo({ top: 0 });
         return;
       }
 
-      // Align the target block's top with the scroll container's top.
-      const containerTop = scroller.getBoundingClientRect().top;
-      const elTop = target.getBoundingClientRect().top;
-      scroller.scrollTop += elTop - containerTop;
+      if (scrollSync) {
+        const containerTop = scroller.getBoundingClientRect().top;
+        const elTop = target.getBoundingClientRect().top;
+        scroller.scrollTop += elTop - containerTop;
+      }
+      flashElement(target);
     };
 
     timerRef.current = window.setTimeout(run, 50);
@@ -96,5 +102,5 @@ export function useEditorScrollSync({
         timerRef.current = null;
       }
     };
-  }, [enabled, cursorLine, lineOffset, scrollRef, articleRef]);
+  }, [editActive, scrollSync, cursorLine, lineOffset, scrollRef, articleRef]);
 }

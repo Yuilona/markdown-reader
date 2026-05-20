@@ -50,6 +50,35 @@ button {
   position: relative;
 }
 
+/* v1.0 bidirectional line-sync flash. A one-shot fade applied to the
+ * preview block (`.source-line-flash`, added imperatively by the scroll-
+ * sync hook) and to the matching editor line (`.cm-line.cm-flashLine`,
+ * a CodeMirror line decoration). The colour is theme-aware via a var. */
+:root {
+  --line-flash-bg: rgba(9, 105, 218, 0.18);
+}
+[data-theme='dark'] {
+  --line-flash-bg: rgba(56, 139, 253, 0.28);
+}
+
+@keyframes md-line-flash {
+  0% {
+    background-color: var(--line-flash-bg);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.source-line-flash {
+  animation: md-line-flash 0.9s ease-out;
+  border-radius: 3px;
+}
+
+.cm-line.cm-flashLine {
+  animation: md-line-flash 0.9s ease-out;
+}
+
 /*
  * PR-5a's `.dropErrorBanner` and `@keyframes dropErrorFade` were removed
  * in PR-8. Error display is now the toast system in

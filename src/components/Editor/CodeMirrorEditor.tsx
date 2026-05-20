@@ -13,6 +13,7 @@ import { getSettings } from '../../lib/settingsStore';
 import { DEFAULT_EDITOR_SETTINGS, type EditorSettings } from '../../lib/settings';
 import { themeExtension, settingsExtension } from './editorExtensions';
 import { markdownActionsKeymap } from './markdownKeymap';
+import { flashLineExtension, flashEditorLine } from './flashLine';
 import styles from './CodeMirrorEditor.module.css';
 
 /**
@@ -45,9 +46,21 @@ export interface CodeMirrorEditorProps {
 }
 
 function CodeMirrorEditor({ value, onChange }: CodeMirrorEditorProps) {
-  const { setCursor } = useEditMode();
+  const { setCursor, registerEditorJump } = useEditMode();
   const { effective } = useTheme();
   const cmRef = useRef<ReactCodeMirrorRef>(null);
+
+  // Bidirectional line sync: register an imperative jump handler so a
+  // preview-block click (DocumentView) can move the editor cursor to the
+  // matching source line and flash it. We read cmRef lazily at call time
+  // so the handler stays valid across re-renders without re-registering.
+  useEffect(() => {
+    registerEditorJump((line: number) => {
+      const view = cmRef.current?.view;
+      if (view) flashEditorLine(view, line);
+    });
+    return () => registerEditorJump(null);
+  }, [registerEditorJump]);
 
   // Editor sub-settings (lineWrap / lineNumbers / tabSize). Start from
   // the defaults so the first paint is correct, then promote to the
@@ -84,6 +97,7 @@ function CodeMirrorEditor({ value, onChange }: CodeMirrorEditorProps) {
     () => [
       markdown(),
       markdownActionsKeymap,
+      flashLineExtension,
       themeExtension(effective),
       settingsExtension(editorSettings),
       EditorView.updateListener.of(onUpdate),

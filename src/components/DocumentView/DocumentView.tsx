@@ -176,7 +176,7 @@ export function DocumentView({
   // on. The cursor line comes from EditModeProvider; the frontmatter
   // offset translates the full-buffer line into a body line that the
   // rehypeSourceLine stamps use.
-  const { cursor } = useEditMode();
+  const { cursor, jumpToEditorLine } = useEditMode();
   const [scrollSyncEnabled, setScrollSyncEnabled] = useState<boolean>(
     DEFAULT_EDITOR_SETTINGS.scrollSync,
   );
@@ -194,12 +194,33 @@ export function DocumentView({
     [frontmatterRaw],
   );
   useEditorScrollSync({
-    enabled: editTextProvided && scrollSyncEnabled,
+    editActive: editTextProvided,
+    scrollSync: scrollSyncEnabled,
     scrollRef,
     articleRef,
     cursorLine: cursor?.line ?? null,
     lineOffset: frontmatterLineOffset,
   });
+
+  // Preview → editor (bidirectional line sync): clicking a rendered block
+  // moves the editor cursor to the matching source line and flashes it.
+  // Only in edit mode; skip clicks on interactive targets (links, images,
+  // mermaid, task checkboxes) so we don't fight their own handlers.
+  const handlePreviewClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (!editTextProvided) return;
+      const targetEl = e.target as HTMLElement;
+      if (targetEl.closest('a, img, button, input, .mermaid-host, [data-no-search]')) {
+        return;
+      }
+      const block = targetEl.closest('[data-source-line]');
+      if (!block) return;
+      const bodyLine = Number(block.getAttribute('data-source-line'));
+      if (!Number.isFinite(bodyLine)) return;
+      jumpToEditorLine(bodyLine + frontmatterLineOffset);
+    },
+    [editTextProvided, jumpToEditorLine, frontmatterLineOffset],
+  );
 
   // Pull the lightbox opener + link router context once at the component
   // root and close over them in the components factory. Both providers'
@@ -411,7 +432,11 @@ export function DocumentView({
   return (
     <FrontmatterProvider resetKey={doc.path ?? ''}>
       <div ref={scrollRef} className={styles.scrollArea}>
-        <article ref={articleRef} className={`${styles.article} markdown-body`}>
+        <article
+          ref={articleRef}
+          className={`${styles.article} markdown-body`}
+          onClick={handlePreviewClick}
+        >
           <Frontmatter raw={frontmatterRaw} />
           {markdownEl}
         </article>

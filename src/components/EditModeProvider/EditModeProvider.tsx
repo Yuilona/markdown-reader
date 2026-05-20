@@ -101,6 +101,12 @@ export interface EditModeContextValue {
    *  whitespace split. Recomputed on every bufferText change — cheap
    *  enough for typical doc sizes (well under 1ms for a 100KB doc). */
   wordCount: number;
+  /** v1.0 bidirectional line sync: CodeMirrorEditor registers an
+   *  imperative "move cursor to + flash line" handler here (or null on
+   *  unmount). DocumentView calls jumpToEditorLine when the user clicks
+   *  a preview block, so the editor jumps to the matching source line. */
+  registerEditorJump: (fn: ((line: number) => void) | null) => void;
+  jumpToEditorLine: (line: number) => void;
 }
 
 const EditModeContext = createContext<EditModeContextValue | null>(null);
@@ -343,6 +349,20 @@ export function EditModeProvider({
     setCursorState(next);
   }, []);
 
+  // v1.0 bidirectional line sync. The editor registers its imperative
+  // jump handler here; DocumentView invokes jumpToEditorLine on a preview
+  // click. Stored in a ref so registering doesn't churn the context value.
+  const editorJumpRef = useRef<((line: number) => void) | null>(null);
+  const registerEditorJump = useCallback(
+    (fn: ((line: number) => void) | null) => {
+      editorJumpRef.current = fn;
+    },
+    [],
+  );
+  const jumpToEditorLine = useCallback((line: number) => {
+    editorJumpRef.current?.(line);
+  }, []);
+
   const value = useMemo<EditModeContextValue>(
     () => ({
       mode,
@@ -356,6 +376,8 @@ export function EditModeProvider({
       cursor,
       setCursor,
       wordCount,
+      registerEditorJump,
+      jumpToEditorLine,
     }),
     [
       mode,
@@ -369,6 +391,8 @@ export function EditModeProvider({
       cursor,
       setCursor,
       wordCount,
+      registerEditorJump,
+      jumpToEditorLine,
     ],
   );
 
