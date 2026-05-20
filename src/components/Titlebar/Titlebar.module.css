@@ -86,6 +86,27 @@
   outline-offset: -2px;
 }
 
+/* v1.0: page-zoom controls (read mode). A − / percent / + cluster. The
+ * percent doubles as a "reset to 100%" button. Narrow buttons so the
+ * trio sits compactly before the secondary affordances. */
+.zoomGroup {
+  display: flex;
+  align-items: stretch;
+}
+
+.zoomBtn {
+  width: 30px;
+}
+
+.zoomLevel {
+  width: auto;
+  min-width: 42px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--titlebar-fg);
+}
+
 /* Theme toggle button (PR-6). Slightly narrower than the standard
  * caption buttons so it visually reads as "secondary" without breaking
  * the Win11 spacing rhythm. */

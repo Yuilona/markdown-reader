@@ -1,7 +1,11 @@
+import { useEffect, useState } from 'react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+
 import { minimize, toggleMaximize, closeWindow } from '../../lib/tauri';
 import { useTheme } from '../ThemeProvider/useTheme';
 import { nextMode } from '../ThemeProvider/themeCycle';
 import { useEditMode } from '../EditModeProvider/useEditMode';
+import { usePageZoom } from '../PageZoom/usePageZoom';
 import { basename } from '../../lib/pathUtils';
 import type { ThemeMode } from '../../lib/settings';
 import styles from './Titlebar.module.css';
@@ -41,6 +45,32 @@ interface TitlebarProps {
 export function Titlebar({ docPath }: TitlebarProps = {}) {
   const { mode, setMode } = useTheme();
   const { mode: editMode, toggleMode, dirty } = useEditMode();
+  const { zoom, zoomIn, zoomOut, resetZoom } = usePageZoom();
+
+  // Track the window's maximized state so the caption button can show the
+  // correct glyph (single square = maximize, overlapping squares =
+  // restore). We query once on mount and re-query on every resize event
+  // (which fires for maximize / restore / drag-resize / snap).
+  const [isMaximized, setIsMaximized] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    const win = getCurrentWindow();
+    const sync = () => {
+      void win.isMaximized().then((m) => {
+        if (!cancelled) setIsMaximized(m);
+      });
+    };
+    sync();
+    void win.onResized(sync).then((un) => {
+      if (cancelled) un();
+      else unlisten = un;
+    });
+    return () => {
+      cancelled = true;
+      if (unlisten) unlisten();
+    };
+  }, []);
 
   const handleThemeClick = () => {
     setMode(nextMode(mode));
@@ -75,6 +105,40 @@ export function Titlebar({ docPath }: TitlebarProps = {}) {
         {titleText}
       </div>
       <div className={styles.controls}>
+        {/* Page-zoom controls — read mode only (R10.5). Scales the whole
+         *  page via body zoom; handy on wide displays where the body text
+         *  reads small. Clicking the percent resets to 100%. */}
+        {!isEdit && docPath && (
+          <div className={styles.zoomGroup}>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.zoomBtn}`}
+              onClick={zoomOut}
+              aria-label="缩小"
+              title="缩小 (Ctrl+-)"
+            >
+              <ZoomIcon kind="out" />
+            </button>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.zoomLevel}`}
+              onClick={resetZoom}
+              aria-label="重置缩放"
+              title="重置缩放 (Ctrl+0)"
+            >
+              {zoom}%
+            </button>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.zoomBtn}`}
+              onClick={zoomIn}
+              aria-label="放大"
+              title="放大 (Ctrl+=)"
+            >
+              <ZoomIcon kind="in" />
+            </button>
+          </div>
+        )}
         <button
           type="button"
           className={`${styles.btn} ${styles.editBtn}`}
@@ -109,20 +173,10 @@ export function Titlebar({ docPath }: TitlebarProps = {}) {
           type="button"
           className={styles.btn}
           onClick={toggleMaximize}
-          aria-label="Maximize"
-          title="最大化/还原"
+          aria-label={isMaximized ? 'Restore' : 'Maximize'}
+          title={isMaximized ? '还原' : '最大化'}
         >
-          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-            <rect
-              x="0.5"
-              y="0.5"
-              width="9"
-              height="9"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1"
-            />
-          </svg>
+          {isMaximized ? <RestoreIcon /> : <MaximizeIcon />}
         </button>
         <button
           type="button"
@@ -175,6 +229,66 @@ function EditModeIcon({ isEdit }: { isEdit: boolean }) {
         <path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z" />
         <path d="M10.5 3.5l2 2" />
       </g>
+    </svg>
+  );
+}
+
+/** Maximize glyph: a single square (window is not maximized). */
+function MaximizeIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+      <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1" />
+    </svg>
+  );
+}
+
+/** Restore glyph: two overlapping squares (window is maximized). The
+ *  back square is drawn as only its exposed top + right edges so it reads
+ *  cleanly without an opaque occluding fill (which wouldn't match the
+ *  button's hover background). */
+function RestoreIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+      <rect x="0.5" y="2.5" width="6" height="6" fill="none" stroke="currentColor" strokeWidth="1" />
+      <path d="M2.5 2.5 V0.5 H8.5 V6.5 H6.5" fill="none" stroke="currentColor" strokeWidth="1" />
+    </svg>
+  );
+}
+
+/** Magnifier glyph with a minus (zoom out) or plus (zoom in) inside. */
+function ZoomIcon({ kind }: { kind: 'in' | 'out' }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="6.5" cy="6.5" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <line
+        x1="10"
+        y1="10"
+        x2="14.5"
+        y2="14.5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <line
+        x1="4.2"
+        y1="6.5"
+        x2="8.8"
+        y2="6.5"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+      {kind === 'in' && (
+        <line
+          x1="6.5"
+          y1="4.2"
+          x2="6.5"
+          y2="8.8"
+          stroke="currentColor"
+          strokeWidth="1.3"
+          strokeLinecap="round"
+        />
+      )}
     </svg>
   );
 }
