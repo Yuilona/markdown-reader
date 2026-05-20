@@ -28,7 +28,7 @@ import {
   registerSecondInstanceListener,
   takeCliLaunchPath,
 } from './lib/singleInstance';
-import { loadDocument, type LoadedDocument } from './lib/tauri';
+import { loadDocument, saveAsDocument, type LoadedDocument } from './lib/tauri';
 import { cleanupStaleTemp } from './lib/recentFiles';
 import { loadUserCss } from './lib/userCss';
 import { LinkRouterContext, type LinkRouterContextValue } from './lib/linkRouter';
@@ -170,6 +170,24 @@ function AppContent() {
     setDoc((prev) => (prev ? { ...prev, text } : prev));
   }, []);
 
+  /**
+   * v1.0 PR-B (R-EDIT-6.2/6.3): Save As. Invoked by EditModeProvider for
+   * Ctrl+Shift+S AND for the first Ctrl+S on an unnamed buffer. Shows the
+   * save dialog, writes the file, bumps recent, and swaps `doc` to the
+   * new path (which starts the file watcher via useFileWatcher and clears
+   * the dirty bit since doc.text now equals the buffer). Returns the new
+   * document, or null if the user cancelled. Rethrows on write failure so
+   * the provider can show the error toast.
+   */
+  const handleSaveAs = useCallback(
+    async (text: string): Promise<LoadedDocument | null> => {
+      const saved = await saveAsDocument(text);
+      if (saved) setDoc(saved);
+      return saved;
+    },
+    [],
+  );
+
   // PR-7: Ctrl+F handler.
   const handleOpenSearch = useCallback(() => {
     setSearchOpen((prev) => {
@@ -269,7 +287,7 @@ function AppContent() {
   // useFileWatcher hook below it can read the edit-mode state).
   return (
     <LinkRouterContext.Provider value={linkRouterValue}>
-      <EditModeProvider doc={doc} onDocTextSync={handleDocTextSync}>
+      <EditModeProvider doc={doc} onDocTextSync={handleDocTextSync} onSaveAs={handleSaveAs}>
         <AppBody
           doc={doc}
           isDragOver={isDragOver}
@@ -338,14 +356,14 @@ function AppBody(props: AppBodyProps) {
     setDocFromPath,
   } = props;
 
-  const { mode, bufferText, setBufferText, dirty, save, toggleMode } = useEditMode();
+  const { mode, bufferText, setBufferText, dirty, save, saveAs, setMode, toggleMode } =
+    useEditMode();
 
-  // Dirty guard — used by Ctrl+W, Ctrl+R, and the window close handler.
-  // Save callback closes over the EditModeProvider's save fn; the guard
-  // shows the 3-button prompt when dirty.
-  const guardedSave = useCallback(async () => {
-    await save();
-  }, [save]);
+  // Dirty guard — used by Ctrl+W, Ctrl+R, Ctrl+N, and the window close
+  // handler. Save callback closes over the EditModeProvider's save fn;
+  // the guard shows the 3-button prompt when dirty. Returns the boolean
+  // so a cancelled Save As dialog aborts the destructive action.
+  const guardedSave = useCallback(() => save(), [save]);
   const { guardedAction } = useDirtyGuard(dirty, guardedSave);
 
   // v1.0 PR-A wraps Ctrl+W with the dirty guard. The unwrapped close
@@ -381,6 +399,24 @@ function AppBody(props: AppBodyProps) {
     });
   }, [doc, save]);
 
+  // v1.0 PR-B (R-EDIT-6.3): Ctrl+Shift+S explicit Save As.
+  const handleSaveAsDocument = useCallback(() => {
+    if (!doc) return;
+    void saveAs().catch((err) => {
+      logger.warn('Ctrl+Shift+S save-as failed:', err);
+    });
+  }, [doc, saveAs]);
+
+  // v1.0 PR-B (R-EDIT-6.1): Ctrl+N (and the EmptyState "新建" button)
+  // create an unnamed buffer and drop straight into edit mode. Guarded so
+  // an unsaved current buffer prompts before being replaced.
+  const handleNewDocument = useCallback(() => {
+    void guardedAction(async () => {
+      setDoc({ path: null, text: '' });
+      await setMode('edit');
+    });
+  }, [guardedAction, setDoc, setMode]);
+
   // Wire the global keyboard shortcuts.
   useShortcuts({
     onOpenDocument: setDoc,
@@ -390,6 +426,8 @@ function AppBody(props: AppBodyProps) {
     onReloadDocument: handleGuardedReloadDocument,
     onToggleEditMode: handleToggleEditMode,
     onSaveDocument: handleSaveDocument,
+    onSaveAsDocument: handleSaveAsDocument,
+    onNewDocument: handleNewDocument,
   });
 
   // v1.0 PR-A: file watcher with conflict handling. The hook itself
@@ -511,6 +549,7 @@ function AppBody(props: AppBodyProps) {
               <EmptyState
                 onOpen={setDoc}
                 onPickRecent={setDocFromPath}
+                onNew={handleNewDocument}
                 isDragOver={isDragOver}
               />
             )}

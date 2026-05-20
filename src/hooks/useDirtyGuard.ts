@@ -42,7 +42,7 @@ interface DirtyGuardResult {
 
 export function useDirtyGuard(
   dirty: boolean,
-  save: () => Promise<void>,
+  save: () => Promise<boolean>,
 ): DirtyGuardResult {
   const confirm = useConfirm();
 
@@ -82,7 +82,10 @@ export function useDirtyGuard(
       if (choice === 'cancel') return;
       if (choice === 'save') {
         try {
-          await save();
+          const saved = await save();
+          // Cancelled Save As dialog (unnamed buffer) → abort; don't run
+          // the destructive proceed with unsaved changes.
+          if (!saved) return;
         } catch {
           // save() already showed an error toast; abort.
           return;

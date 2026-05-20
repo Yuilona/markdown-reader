@@ -50,16 +50,21 @@ export function Titlebar({ docPath }: TitlebarProps = {}) {
     void toggleMode();
   };
 
-  // Title computation. EmptyState has no doc → show app name. Dirty
-  // mark renders only when both: doc is open AND buffer differs from
-  // disk. The marker is a U+25CF BLACK CIRCLE — matches every common
-  // editor's "modified" affordance (VS Code, Sublime, etc.).
-  const baseTitle = docPath ? basename(docPath) : 'Markdown Reader';
-  const titleText = dirty ? `● ${baseTitle}` : baseTitle;
-
   // Edit-mode tooltip + icon. When in edit mode the icon is an eye
   // (👁 → "click to view / read") and vice versa.
   const isEdit = editMode === 'edit';
+
+  // Title computation. With a path → its basename. No path but in edit
+  // mode → an unnamed buffer (Ctrl+N, R-EDIT-6.1). No path + read mode →
+  // EmptyState, show the app name. Dirty mark (U+25CF) renders when the
+  // buffer differs from disk — matches every common editor's "modified"
+  // affordance.
+  const baseTitle = docPath
+    ? basename(docPath)
+    : isEdit
+      ? '未命名文档'
+      : 'Markdown Reader';
+  const titleText = dirty ? `● ${baseTitle}` : baseTitle;
   const editTooltip = isEdit
     ? '切换为阅读模式 (Ctrl+E)'
     : '切换为编辑模式 (Ctrl+E)';

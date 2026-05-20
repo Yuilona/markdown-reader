@@ -6,11 +6,16 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 
 import { remarkPlugins, rehypePlugins } from '../../lib/markdownPlugins';
 import { rehypeMermaidPretag } from '../../lib/rehypeMermaidPretag';
+import { rehypeSourceLine } from '../../lib/rehypeSourceLine';
 import { splitFrontmatter } from '../../lib/parseFrontmatter';
 import { dirname, normalizePath } from '../../lib/pathUtils';
 import { handleLinkClick, useLinkRouter } from '../../lib/linkRouter';
 import type { LoadedDocument } from '../../lib/tauri';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
+import { useEditMode } from '../EditModeProvider/useEditMode';
+import { useEditorScrollSync } from '../Editor/useEditorScrollSync';
+import { getSettings } from '../../lib/settingsStore';
+import { DEFAULT_EDITOR_SETTINGS } from '../../lib/settings';
 import { useContextMenu, type ContextMenuItem } from '../ContextMenu/ContextMenuContext';
 import { useStatusBar } from '../StatusBar/StatusBarContext';
 import { useToast } from '../Toast/useToast';
@@ -113,7 +118,11 @@ interface DocumentViewProps {
  * frontmatter open-state for R8.10's "search frontmatter only when
  * expanded" rule.
  */
-const rehypePluginsWithMermaid: PluggableList = [rehypeMermaidPretag, ...rehypePlugins];
+const rehypePluginsWithMermaid: PluggableList = [
+  rehypeSourceLine,
+  rehypeMermaidPretag,
+  ...rehypePlugins,
+];
 
 export function DocumentView({
   doc,
@@ -162,6 +171,36 @@ export function DocumentView({
   const articleRef = useRef<HTMLElement | null>(null);
   useScrollMemory(scrollRef, doc.path);
 
+  // v1.0 PR-B (R-EDIT-4): editor → preview scroll sync. Only active in
+  // edit mode (editText provided) AND when settings.editor.scrollSync is
+  // on. The cursor line comes from EditModeProvider; the frontmatter
+  // offset translates the full-buffer line into a body line that the
+  // rehypeSourceLine stamps use.
+  const { cursor } = useEditMode();
+  const [scrollSyncEnabled, setScrollSyncEnabled] = useState<boolean>(
+    DEFAULT_EDITOR_SETTINGS.scrollSync,
+  );
+  useEffect(() => {
+    let cancelled = false;
+    void getSettings().then((s) => {
+      if (!cancelled) setScrollSyncEnabled(s.editor.scrollSync);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const frontmatterLineOffset = useMemo(
+    () => (frontmatterRaw ? frontmatterRaw.split('\n').length + 2 : 0),
+    [frontmatterRaw],
+  );
+  useEditorScrollSync({
+    enabled: editTextProvided && scrollSyncEnabled,
+    scrollRef,
+    articleRef,
+    cursorLine: cursor?.line ?? null,
+    lineOffset: frontmatterLineOffset,
+  });
+
   // Pull the lightbox opener + link router context once at the component
   // root and close over them in the components factory. Both providers'
   // values are stabilized with `useCallback`/`useMemo` so the factory
@@ -175,8 +214,13 @@ export function DocumentView({
   const ctxMenu = useContextMenu();
   const statusBar = useStatusBar();
   const toast = useToast();
-  const docDir = useMemo(() => dirname(doc.path), [doc.path]);
-  const docPath = doc.path;
+  // v1.0 PR-B: an unnamed buffer (Ctrl+N) has no path, so there's no
+  // directory to resolve relative images/links against — fall back to
+  // empty string (resolveImageSrc + handleLinkClick both treat '' as
+  // "no base", rendering relative refs inert, which is correct for a
+  // not-yet-saved document).
+  const docDir = useMemo(() => (doc.path ? dirname(doc.path) : ''), [doc.path]);
+  const docPath = doc.path ?? '';
 
   const onLinkClick = useCallback(
     async (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
@@ -344,18 +388,32 @@ export function DocumentView({
     [doc.path, debouncedSourceText],
   );
 
+  // Memoize the rendered markdown so it only re-runs the (heavy)
+  // remark/rehype/Shiki pipeline when the body or component overrides
+  // actually change — NOT on every cursor move in edit mode (DocumentView
+  // now subscribes to `cursor` for scroll sync) nor on every keystroke
+  // (bufferText changes each key but `body` only updates past the 500ms
+  // debounce). `components` is already useMemo-stable and the plugin
+  // arrays are module constants.
+  const markdownEl = useMemo(
+    () => (
+      <Markdown
+        remarkPlugins={remarkPlugins}
+        rehypePlugins={rehypePluginsWithMermaid}
+        components={components}
+      >
+        {body}
+      </Markdown>
+    ),
+    [body, components],
+  );
+
   return (
-    <FrontmatterProvider resetKey={doc.path}>
+    <FrontmatterProvider resetKey={doc.path ?? ''}>
       <div ref={scrollRef} className={styles.scrollArea}>
         <article ref={articleRef} className={`${styles.article} markdown-body`}>
           <Frontmatter raw={frontmatterRaw} />
-          <Markdown
-            remarkPlugins={remarkPlugins}
-            rehypePlugins={rehypePluginsWithMermaid}
-            components={components}
-          >
-            {body}
-          </Markdown>
+          {markdownEl}
         </article>
       </div>
       {/* v1.0 PR-A (R-EDIT-2.4 / R-EDIT-9.7): when in edit mode the

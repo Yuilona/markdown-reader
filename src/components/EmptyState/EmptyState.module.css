@@ -58,8 +58,14 @@
   color: var(--fg-muted);
 }
 
-.openBtn {
+/* v1.0 PR-B (R-EDIT-10.1): "打开" + "新建" side by side. */
+.actions {
   margin-top: 4px;
+  display: flex;
+  gap: 10px;
+}
+
+.openBtn {
   padding: 8px 18px;
   font-size: 14px;
   background: var(--btn-bg);
@@ -82,6 +88,23 @@
 .openBtn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* "新建" reads as the primary action — filled accent. */
+.newBtn {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}
+
+.newBtn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  filter: brightness(1.08);
+}
+
+.newBtn:active {
+  filter: brightness(0.95);
 }
 
 .recent {

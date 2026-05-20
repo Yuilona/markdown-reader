@@ -10,6 +10,8 @@ interface EmptyStateProps {
    * through `setDocFromPath` so recent-list bookkeeping happens centrally.
    */
   onPickRecent: (path: string) => void;
+  /** v1.0 PR-B (R-EDIT-10.1): "新建" button — same effect as Ctrl+N. */
+  onNew: () => void;
   /**
    * True when a file is currently being dragged over the window (driven
    * by App.tsx's useDragDrop hook — see PR-5a brief §1). EmptyState
@@ -19,7 +21,7 @@ interface EmptyStateProps {
   isDragOver: boolean;
 }
 
-export function EmptyState({ onOpen, onPickRecent, isDragOver }: EmptyStateProps) {
+export function EmptyState({ onOpen, onPickRecent, onNew, isDragOver }: EmptyStateProps) {
   const handleOpen = async () => {
     const doc = await openFileDialog();
     if (doc) onOpen(doc);
@@ -31,9 +33,18 @@ export function EmptyState({ onOpen, onPickRecent, isDragOver }: EmptyStateProps
         <div className={styles.logo}>M</div>
         <p className={styles.hint}>拖拽 .md 文件到此处</p>
         <p className={styles.hintSub}>或</p>
-        <button type="button" className={styles.openBtn} onClick={handleOpen}>
-          打开文件 (Ctrl+O)
-        </button>
+        <div className={styles.actions}>
+          <button type="button" className={styles.openBtn} onClick={handleOpen}>
+            打开文件 (Ctrl+O)
+          </button>
+          <button
+            type="button"
+            className={`${styles.openBtn} ${styles.newBtn}`}
+            onClick={onNew}
+          >
+            新建 (Ctrl+N)
+          </button>
+        </div>
         <RecentList onPick={onPickRecent} />
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { open } from '@tauri-apps/plugin-dialog';
+import { open, save } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 
 import { normalizePath, isMarkdownPath } from './pathUtils';
@@ -51,9 +51,14 @@ export const toggleFullscreen = async (): Promise<void> => {
 
 export const getDataDir = (): Promise<string> => invoke<string>('get_data_dir');
 
-/** A loaded markdown document: absolute path on disk + raw text. */
+/** A loaded markdown document.
+ *
+ * `path` is the absolute on-disk path, or `null` for an unsaved "new"
+ * buffer created via Ctrl+N (v1.0 PR-B, R-EDIT-6). A null-path document
+ * has no scroll-memory key, no file watcher, and no recent-list entry
+ * until it's first saved via Save As. */
 export interface LoadedDocument {
-  path: string;
+  path: string | null;
   text: string;
 }
 
@@ -135,6 +140,41 @@ export async function saveDocument(path: string, text: string): Promise<void> {
     logger.warn('failed to save file:', normalized, err);
     throw err;
   }
+}
+
+/**
+ * v1.0 (R-EDIT-6.2/6.3, PR-B): Save As. Show the native save dialog,
+ * force a `.md` extension when the user omits one, write the buffer, add
+ * the new path to the recent list, and return a fresh LoadedDocument.
+ *
+ * Returns `null` when the user cancels the dialog. Rethrows on write
+ * failure so the caller can show an error toast (parity with
+ * `saveDocument`).
+ *
+ * Used by both the explicit Ctrl+Shift+S and the first Ctrl+S on an
+ * unnamed (path === null) buffer.
+ */
+export async function saveAsDocument(text: string): Promise<LoadedDocument | null> {
+  const picked = await save({
+    defaultPath: 'untitled.md',
+    filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+  });
+  if (typeof picked !== 'string') {
+    return null;
+  }
+  // Force a markdown extension when the user typed a bare name (R-EDIT-6.2).
+  const target = /\.(md|markdown)$/i.test(picked) ? picked : `${picked}.md`;
+  const normalized = normalizePath(target);
+  try {
+    await writeTextFile(normalized, text);
+  } catch (err) {
+    logger.warn('failed to save-as file:', normalized, err);
+    throw err;
+  }
+  // A Save As IS a "user created/opened this file" event — bump recent
+  // (R-EDIT-6.4), unlike the in-place saveDocument path.
+  void pushRecent(normalized);
+  return { path: normalized, text };
 }
 
 /**

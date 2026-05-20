@@ -9,6 +9,7 @@ import {
 } from 'react';
 
 import { saveDocument, type LoadedDocument } from '../../lib/tauri';
+import * as logger from '../../lib/logger';
 import { DEFAULT_SETTINGS } from '../../lib/settings';
 import { getSettings } from '../../lib/settingsStore';
 import { useToast } from '../Toast/useToast';
@@ -83,9 +84,14 @@ export interface EditModeContextValue {
   /** True when bufferText has diverged from doc.text. */
   dirty: boolean;
   /** Explicit save (Ctrl+S). Toast on success unless `silent` is true.
-   *  Throws on FS failure; the caller (useShortcuts) catches + logs +
-   *  surfaces an error toast. */
-  save: (options?: { silent?: boolean }) => Promise<void>;
+   *  For an unnamed buffer (doc.path === null) this routes to Save As.
+   *  Resolves to `true` when the buffer was persisted, `false` when the
+   *  user cancelled the Save As dialog. The error toast (and a rethrow)
+   *  happen on real FS failures. */
+  save: (options?: { silent?: boolean }) => Promise<boolean>;
+  /** Explicit Save As (Ctrl+Shift+S): always prompts for a new path,
+   *  even for an already-named doc. Same resolve contract as `save`. */
+  saveAs: (options?: { silent?: boolean }) => Promise<boolean>;
   /** Cursor info for StatusBar. CM6 calls `setCursor(...)` on every
    *  selectionSet event. `null` when not in edit mode. */
   cursor: CursorInfo | null;
@@ -103,10 +109,15 @@ export { EditModeContext };
 interface EditModeProviderProps {
   /** The currently-loaded document. `null` when on EmptyState. */
   doc: LoadedDocument | null;
-  /** Called after a successful save with the just-written text. The
-   *  parent uses this to refresh its LoadedDocument so doc.text
+  /** Called after a successful in-place save with the just-written text.
+   *  The parent uses this to refresh its LoadedDocument so doc.text
    *  matches what's on disk. */
   onDocTextSync: (text: string) => void;
+  /** v1.0 PR-B (R-EDIT-6): perform a Save As. The parent shows the save
+   *  dialog, writes the file, swaps `doc` to the new path, and bumps the
+   *  recent list. Returns the new LoadedDocument on success, or `null`
+   *  when the user cancelled. Rethrows on a real write failure. */
+  onSaveAs: (text: string) => Promise<LoadedDocument | null>;
   children: ReactNode;
 }
 
@@ -125,6 +136,7 @@ function countWords(text: string): number {
 export function EditModeProvider({
   doc,
   onDocTextSync,
+  onSaveAs,
   children,
 }: EditModeProviderProps) {
   const toast = useToast();
@@ -225,16 +237,43 @@ export function EditModeProvider({
   // `silent: true` is used by the mode-switch auto-save path
   // (R-EDIT-5.2) so the user doesn't get a "已保存" toast every time
   // they toggle back to read mode.
-  const save = useCallback(
-    async (options: { silent?: boolean } = {}): Promise<void> => {
-      if (!doc) {
-        // PR-A: no doc, no save target. PR-B will handle the
-        // unsaved-new-buffer case with a Save As dialog.
-        return;
-      }
+  // Save As (R-EDIT-6.2/6.3): always prompts for a path via the parent's
+  // onSaveAs. On success the parent swaps `doc` to the new path; the
+  // resulting doc.text change flows back through the reset effect, where
+  // the justWroteText guard prevents clobbering. Returns true when
+  // persisted, false on dialog cancellation.
+  const saveAs = useCallback(
+    async (options: { silent?: boolean } = {}): Promise<boolean> => {
+      if (!doc) return false;
       const textToWrite = bufferText;
       try {
-        await saveDocument(doc.path, textToWrite);
+        const result = await onSaveAs(textToWrite);
+        if (!result) return false; // User cancelled the dialog.
+        justWroteTextRef.current = textToWrite;
+        if (!options.silent) {
+          toast.show('已保存', { variant: 'success' });
+        }
+        return true;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        toast.show('保存失败', { variant: 'error', details: message });
+        throw err;
+      }
+    },
+    [doc, bufferText, onSaveAs, toast],
+  );
+
+  const save = useCallback(
+    async (options: { silent?: boolean } = {}): Promise<boolean> => {
+      if (!doc) return false;
+      // Unnamed buffer (Ctrl+N) → first save must pick a path (R-EDIT-6.2).
+      if (doc.path === null) {
+        return saveAs(options);
+      }
+      const textToWrite = bufferText;
+      const path = doc.path;
+      try {
+        await saveDocument(path, textToWrite);
         // Mark this text as our self-write so the parent's resulting
         // doc.text change doesn't clobber any post-save typing the
         // user did during the await above. See the reset effect's
@@ -245,9 +284,11 @@ export function EditModeProvider({
         if (!options.silent) {
           toast.show('已保存', { variant: 'success' });
         }
+        return true;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         toast.show('保存失败', { variant: 'error', details: message });
+        logger.warn('save failed:', path, err);
         // Bubble so the caller knows the save didn't take. Used by the
         // mode-switch flow to NOT switch back to read mode when the
         // silent-save failed (otherwise the dirty buffer would silently
@@ -255,7 +296,7 @@ export function EditModeProvider({
         throw err;
       }
     },
-    [doc, bufferText, onDocTextSync, toast],
+    [doc, bufferText, onDocTextSync, toast, saveAs],
   );
 
   // setMode with the dirty-aware silent-save logic for edit→read
@@ -267,7 +308,10 @@ export function EditModeProvider({
       if (next === mode) return;
       if (mode === 'edit' && next === 'read' && dirty && doc) {
         try {
-          await save({ silent: true });
+          const saved = await save({ silent: true });
+          // Cancelled Save As dialog (unnamed buffer) → abort the flip so
+          // the dirty buffer stays visible in edit mode.
+          if (!saved) return;
         } catch {
           // Save failed — abort the mode flip so the user can see + retry.
           // The save() call already showed an error toast.
@@ -308,6 +352,7 @@ export function EditModeProvider({
       setBufferText,
       dirty,
       save,
+      saveAs,
       cursor,
       setCursor,
       wordCount,
@@ -320,6 +365,7 @@ export function EditModeProvider({
       setBufferText,
       dirty,
       save,
+      saveAs,
       cursor,
       setCursor,
       wordCount,

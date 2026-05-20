@@ -37,6 +37,12 @@ interface UseShortcutsOptions {
   /** v1.0 PR-A (R-EDIT-5.1): Ctrl+S handler. Saves the editor buffer
    *  to disk (no-op when buffer is clean / no doc). */
   onSaveDocument?: () => void;
+  /** v1.0 PR-B (R-EDIT-6.3): Ctrl+Shift+S handler. Always prompts for a
+   *  new path (Save As). */
+  onSaveAsDocument?: () => void;
+  /** v1.0 PR-B (R-EDIT-6.1): Ctrl+N handler. Creates an unnamed buffer
+   *  and enters edit mode. */
+  onNewDocument?: () => void;
 }
 
 /** Test whether a KeyboardEvent originated inside CodeMirror 6's editor
@@ -131,6 +137,8 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
     onReloadDocument,
     onToggleEditMode,
     onSaveDocument,
+    onSaveAsDocument,
+    onNewDocument,
   } = options;
   const { mode, setMode } = useTheme();
   const { zoomIn, zoomOut, resetZoom } = usePageZoom();
@@ -159,6 +167,14 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
         if (onToggleEditMode) onToggleEditMode();
         return;
       }
+      // Ctrl+Shift+S = Save As (v1.0 PR-B, R-EDIT-6.3). Checked BEFORE the
+      // plain Ctrl+S branch (which requires !shiftKey) so the two don't
+      // collide. Fires even inside CM6.
+      if (e.ctrlKey && e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (onSaveAsDocument) onSaveAsDocument();
+        return;
+      }
       // Ctrl+S saves the editor buffer (v1.0 PR-A, R-EDIT-5.1). Fires
       // even when focus is inside CM6 — CM6's default has no Mod-s
       // binding (the browser would otherwise open the Save Page As
@@ -166,6 +182,13 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
       if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') {
         e.preventDefault();
         if (onSaveDocument) onSaveDocument();
+        return;
+      }
+      // Ctrl+N creates a new unnamed buffer + enters edit mode (v1.0
+      // PR-B, R-EDIT-6.1). Fires even inside CM6.
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        if (onNewDocument) onNewDocument();
         return;
       }
       // Ctrl+F opens the search bar (R13, PR-7). v1.0 PR-A: when focus
@@ -292,6 +315,8 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
     onReloadDocument,
     onToggleEditMode,
     onSaveDocument,
+    onSaveAsDocument,
+    onNewDocument,
     mode,
     setMode,
     zoomIn,

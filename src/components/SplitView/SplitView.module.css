@@ -1,15 +1,9 @@
-/* Adaptive split-view (v1.0 PR-A, R-EDIT-2.1).
+/* Adaptive split-view (v1.0 PR-A layout, PR-B drag splitter).
  *
- * The outer flex container flips its direction based on the
- * orientation class set by SplitView.tsx. Both panes get `flex: 1 1
- * 50%` so they share the available space evenly (PR-A fixed 50/50;
- * PR-B will swap flex-basis for the persisted ratio).
- *
- * Min sizes (R-EDIT-2.2): 200px in the active axis. This is enforced
- * even in PR-A because the layout will already need it once viewports
- * narrow toward the 900px breakpoint — without a min, the right pane
- * shrinks below the markdown's 820px column and the line lengths get
- * silly.
+ * The outer flex container flips direction via the orientation class.
+ * The first pane's flex-basis is set inline (the persisted ratio); the
+ * second pane fills the remaining space. Min sizes (R-EDIT-2.2) act as a
+ * hard floor even mid-drag.
  */
 
 .split {
@@ -29,7 +23,9 @@
 }
 
 .pane {
-  flex: 1 1 50%;
+  /* Second pane default: fill whatever the first pane's basis leaves.
+   * The first pane overrides this with an inline `flex: 0 0 <ratio>`. */
+  flex: 1 1 0;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -37,31 +33,44 @@
   overflow: hidden;
 }
 
-/* Horizontal: enforce min-width per pane so the preview doesn't
- * collapse under its 820px column. */
 .horizontal .pane {
   min-width: 200px;
 }
 
-/* Vertical: enforce min-height per pane for the same reason. */
 .vertical .pane {
   min-height: 200px;
 }
 
-/* Gutter divider (4px). PR-A: static; PR-B: drag handle. The hover
- * affordance is wired in PR-B too — for now, no cursor change. */
+/* While dragging, suppress text selection + pointer events inside the
+ * panes so the drag is smooth (the gutter has pointer capture, but the
+ * editor/preview shouldn't show a text caret or hover states). */
+.dragging .pane {
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Gutter divider: 4px visual band with a wider invisible hit area via
+ * padding-box trick (background-clip keeps the visible stripe thin while
+ * the element itself is easier to grab). PR-B: draggable. */
 .gutter {
-  flex: 0 0 4px;
+  flex: 0 0 6px;
   background: var(--border-muted);
-  /* Subtle hover even in PR-A: helps users discover the divider
-   * exists once PR-B makes it draggable. */
+  background-clip: content-box;
   transition: background-color 0.12s ease;
+  touch-action: none;
+}
+
+.gutter:hover,
+.dragging .gutter {
+  background-color: var(--accent, #0969da);
 }
 
 .horizontal .gutter {
-  cursor: default;
+  cursor: col-resize;
+  padding: 0 1px;
 }
 
 .vertical .gutter {
-  cursor: default;
+  cursor: row-resize;
+  padding: 1px 0;
 }
