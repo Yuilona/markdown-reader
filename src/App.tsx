@@ -442,11 +442,24 @@ function AppBody(props: AppBodyProps) {
     onReload: onWatcherReload,
   });
 
+  // Set to true once the dirty-guard has resolved and we're committing
+  // to closing the window. Read by the onCloseRequested handler below to
+  // avoid re-prompting on the re-fired close. See that effect's comment.
+  const forceCloseRef = useRef(false);
+
   // v1.0 PR-A: window-close request from the OS / titlebar ✕. Wrap
   // with the dirty guard so the user can't lose unsaved edits by
   // clicking the close button. Tauri's `onCloseRequested` event lets
   // us call `preventDefault()` to suppress the close — that's how
   // the cancel branch of the guard avoids actually closing.
+  //
+  // `forceCloseRef` breaks the re-entrancy loop: the proceed callback
+  // calls `win.close()`, which fires `onCloseRequested` AGAIN. On a
+  // "discard" choice the dirty bit is still set (discarding doesn't
+  // rewrite the buffer), so without this flag the handler would
+  // preventDefault + re-prompt forever and the window could never
+  // close. We set the flag right before the proceed close, and the
+  // handler short-circuits when it sees it.
   //
   // Wiring constraint: this effect must run AFTER the EditModeProvider
   // is mounted (so the guardedAction closes over the live `dirty`
@@ -458,19 +471,23 @@ function AppBody(props: AppBodyProps) {
       try {
         const win = getCurrentWindow();
         const un = await win.onCloseRequested(async (event) => {
+          // Guard already resolved (discard / save) → let this close go.
+          if (forceCloseRef.current) return;
           if (!dirty) return; // No guard needed — let the close proceed.
           event.preventDefault();
           // Now run the prompt. If the user picks discard / save +
           // succeed, re-issue the close. The `cancel` branch leaves
           // the window open (we already preventDefault'd above).
           void guardedAction(async () => {
-            // We've already preventDefault'd the OS-driven close; to
-            // actually close after a successful prompt resolution, call
-            // `win.close()`. The dirty bit is now false (save case) or
-            // the user accepted discard.
+            // Mark the next close as forced so the re-fired
+            // onCloseRequested doesn't re-prompt (the dirty bit is
+            // still set on the discard path).
+            forceCloseRef.current = true;
             try {
               await win.close();
             } catch (err) {
+              // Close failed — clear the flag so the guard can run again.
+              forceCloseRef.current = false;
               logger.warn('window close after guard failed:', err);
             }
           });
