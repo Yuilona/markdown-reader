@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
+import { readTextFile, writeTextFile, rename, remove } from '@tauri-apps/plugin-fs';
 
 import { normalizePath, isMarkdownPath } from './pathUtils';
 import { pushRecent } from './recentFiles';
@@ -135,9 +135,41 @@ export async function loadDocument(
 export async function saveDocument(path: string, text: string): Promise<void> {
   const normalized = normalizePath(path);
   try {
-    await writeTextFile(normalized, text);
+    await atomicWriteText(normalized, text);
   } catch (err) {
     logger.warn('failed to save file:', normalized, err);
+    throw err;
+  }
+}
+
+/**
+ * Atomic text write (v1.1): write the full contents to a sibling
+ * `<path>.tmp`, then `rename` it over the target. The rename is atomic on
+ * the same volume (the tmp lives in the same directory), so a crash /
+ * power loss mid-write leaves the ORIGINAL file intact instead of a
+ * half-written, truncated document — the failure mode that a plain
+ * `writeTextFile(path)` exposes.
+ *
+ * This mirrors the proven `persistJson.atomicWriteJson` pattern (used for
+ * settings.json / recent.json), now applied to the user's own document
+ * where data loss matters most.
+ *
+ * On failure we best-effort remove the orphaned `.tmp` so a failed save
+ * doesn't litter the user's folder; the original is never touched because
+ * we only rename AFTER a complete tmp write.
+ */
+async function atomicWriteText(absPath: string, text: string): Promise<void> {
+  const tmpPath = `${absPath}.tmp`;
+  try {
+    await writeTextFile(tmpPath, text);
+    await rename(tmpPath, absPath);
+  } catch (err) {
+    try {
+      await remove(tmpPath);
+    } catch {
+      // Orphaned tmp couldn't be removed (e.g. it was never created).
+      // Harmless — the original document is intact regardless.
+    }
     throw err;
   }
 }
@@ -166,7 +198,7 @@ export async function saveAsDocument(text: string): Promise<LoadedDocument | nul
   const target = /\.(md|markdown)$/i.test(picked) ? picked : `${picked}.md`;
   const normalized = normalizePath(target);
   try {
-    await writeTextFile(normalized, text);
+    await atomicWriteText(normalized, text);
   } catch (err) {
     logger.warn('failed to save-as file:', normalized, err);
     throw err;
