@@ -1,0 +1,36 @@
+name: check
+
+# Lightweight gate on every push to main + all PRs: typecheck, unit tests,
+# and the frontend production build. Deliberately does NOT build the Tauri
+# app (that's slow + Windows-only) — see release.yml for the full bundle.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Frontend build
+        run: pnpm build

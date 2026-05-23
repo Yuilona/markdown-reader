@@ -46,6 +46,8 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.1.0",
     "@types/hast": "^3.0.4",
     "@types/mdast": "4.0.4",
     "@types/react": "^18.3.12",
@@ -53,6 +55,7 @@
     "@types/unist": "3.0.3",
     "@vitejs/plugin-react": "^4.3.3",
     "typescript": "^5.6.3",
+    "jsdom": "^25.0.1",
     "unified": "11.0.5",
     "vfile": "6.0.3",
     "vite": "^5.4.10",

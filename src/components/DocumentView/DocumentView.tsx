@@ -7,7 +7,7 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { remarkPlugins, rehypePlugins } from '../../lib/markdownPlugins';
 import { rehypeMermaidPretag } from '../../lib/rehypeMermaidPretag';
 import { rehypeSourceLine, rehypeSourceLineApply, readSourceLine } from '../../lib/rehypeSourceLine';
-import { splitFrontmatter } from '../../lib/parseFrontmatter';
+import { splitFrontmatter, frontmatterLineOffset } from '../../lib/parseFrontmatter';
 import { dirname, normalizePath } from '../../lib/pathUtils';
 import { handleLinkClick, useLinkRouter } from '../../lib/linkRouter';
 import type { LoadedDocument } from '../../lib/tauri';
@@ -192,17 +192,14 @@ export function DocumentView({
       cancelled = true;
     };
   }, []);
-  const frontmatterLineOffset = useMemo(
-    () => (frontmatterRaw ? frontmatterRaw.split('\n').length + 2 : 0),
-    [frontmatterRaw],
-  );
+  const lineOffset = useMemo(() => frontmatterLineOffset(frontmatterRaw), [frontmatterRaw]);
   useEditorScrollSync({
     editActive: editTextProvided,
     scrollSync: scrollSyncEnabled,
     scrollRef,
     articleRef,
     cursorLine: cursor?.line ?? null,
-    lineOffset: frontmatterLineOffset,
+    lineOffset,
   });
 
   // Preview → editor (bidirectional line sync): clicking a rendered block
@@ -224,9 +221,9 @@ export function DocumentView({
       if (!block) return;
       const bodyLine = Number(block.getAttribute('data-source-line'));
       if (!Number.isFinite(bodyLine)) return;
-      jumpToEditorLine(bodyLine + frontmatterLineOffset);
+      jumpToEditorLine(bodyLine + lineOffset);
     },
-    [editTextProvided, jumpToEditorLine, frontmatterLineOffset],
+    [editTextProvided, jumpToEditorLine, lineOffset],
   );
 
   // Pull the lightbox opener + link router context once at the component

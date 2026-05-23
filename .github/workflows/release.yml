@@ -1,0 +1,49 @@
+name: release
+
+# Push a tag like v1.1.0 → build the Tauri app on Windows and publish a
+# GitHub Release with the NSIS + MSI installers attached. This guarantees
+# the released artifact is the one CI built (not a local machine), closing
+# the "works in dev, white-screen in the shipped build" gap.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      # tauri-action runs `tauri build` (which runs beforeBuildCommand
+      # `pnpm build`), then creates/updates the release for this tag and
+      # uploads the bundled NSIS .exe + MSI.
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: ${{ github.ref_name }}
+          releaseDraft: false
+          prerelease: false

@@ -45,3 +45,18 @@ export function splitFrontmatter(text: string): SplitFrontmatter | null {
   const body = lines.slice(close + 1).join('\n');
   return { raw, body };
 }
+
+/**
+ * How many source lines the frontmatter consumed, i.e. the offset to add
+ * to a BODY line to get the original full-buffer line (and subtract to go
+ * the other way). Used by the editor↔preview line sync.
+ *
+ * The frontmatter is the opening `---`, the `raw` YAML lines, and the
+ * closing `---`, so the offset is `rawLineCount + 2`. No frontmatter → 0.
+ *
+ * `raw` is the `SplitFrontmatter.raw` returned above (lines joined by
+ * `\n`), so a simple `\n` split recovers the YAML line count.
+ */
+export function frontmatterLineOffset(raw: string): number {
+  return raw ? raw.split('\n').length + 2 : 0;
+}
