@@ -29,6 +29,7 @@ Typora 那种 WYSIWYG，也不做 Obsidian 的 vault。
 - 自动 TOC 右侧栏，跟随当前阅读区域高亮
 - 拖拽打开 + 最近 10 文件 + Windows 文件关联
 - 外部编辑器保存自动重载（保留滚动位置）
+- 保存采用原子写（写临时文件再替换），崩溃 / 断电不会损坏正在保存的文件
 - 链接路由：HTTP → 系统浏览器 / 本地 .md → 当前窗口 /
   其他本地文件 → 系统默认应用
 - 打印（强制亮色 + 隐藏 chrome + 代码自动换行 + 链接 URL 追加）
@@ -94,8 +95,8 @@ Typora 那种 WYSIWYG，也不做 Obsidian 的 vault。
 无法创建）。NSIS 安装器原生支持 "Choose Install Location" 步骤，
 所以路径选择是必经流程。
 
-> 首次运行时 Windows SmartScreen 会拦一下（v0.1 没有代码签名），
-> 点 "更多信息" → "仍要运行" 即可。这是 v0.1 个人项目的预期行为。
+> 首次运行时 Windows SmartScreen 会拦一下（没有代码签名），
+> 点 "更多信息" → "仍要运行" 即可。这是个人项目的预期行为。
 
 ### 方式二：MSI 安装包
 
@@ -113,12 +114,21 @@ Build Tools。
 ```bash
 pnpm install
 pnpm tauri dev    # 开发模式：热重载 React + Tauri shell
+pnpm test         # 单元测试（Vitest）
 pnpm tauri build  # 构建 release（生成 NSIS .exe + MSI 到 src-tauri/target/release/bundle/）
 ```
 
 构建产物：
 - `src-tauri/target/release/bundle/nsis/markdown-reader_x.y.z_x64-setup.exe`
 - `src-tauri/target/release/bundle/msi/markdown-reader_x.y.z_x64_en-US.msi`
+
+### 持续集成 / 发版
+
+- `.github/workflows/check.yml`：push 到 main / PR 时跑 `tsc` + `pnpm test` +
+  `vite build`（不构建 Tauri，快）。
+- `.github/workflows/release.yml`：推送 `v*` tag 时在 Windows 上 `tauri build`
+  并自动发 GitHub Release、上传 NSIS + MSI —— 保证发布的安装包就是 CI 构建的那个。
+  发版只需 `git tag vX.Y.Z && git push origin vX.Y.Z`。
 
 ## 数据目录
 
