@@ -298,8 +298,12 @@
   margin: 1.4rem 0;
 }
 
-/* Tables: borderless except hairline row rules; no zebra, no radius. */
-.markdown-body table { border: none; display: table; width: 100%; }
+/* Tables: borderless except hairline row rules; no zebra, no radius.
+ * Do NOT override github-markdown-css's `display:block; width:max-content;
+ * max-width:100%; overflow:auto` — that's what keeps a wide table scrolling
+ * horizontally inside the content column instead of overflowing the right
+ * edge. We only restyle borders/spacing here. */
+.markdown-body table { border: none; }
 .markdown-body table tr { background: none; border: none; }
 .markdown-body table tr:nth-child(2n) { background: none; }
 .markdown-body table th,
