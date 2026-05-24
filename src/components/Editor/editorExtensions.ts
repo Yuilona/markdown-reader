@@ -114,15 +114,20 @@ const markdownHighlight = HighlightStyle.define([
 export function themeExtension(effective: 'light' | 'dark'): Extension {
   return [
     chromeTheme(effective === 'dark'),
-    // Markdown tokens (Claude/GitHub palette) — primary, takes precedence
-    // so headings/bold/etc. keep their existing colors.
+    // Markdown tokens (Claude/GitHub palette) — listed FIRST so it wins
+    // precedence for the tags it defines (headings/bold/link/…).
     syntaxHighlighting(markdownHighlight),
-    // Fenced-code tokens — fallback layer so per-language grammars get
-    // multi-color highlighting that's readable in both themes.
-    syntaxHighlighting(
-      effective === 'dark' ? oneDarkHighlightStyle : defaultHighlightStyle,
-      { fallback: true },
-    ),
+    // Fenced-code tokens — per-language grammars get multi-color
+    // highlighting readable in both themes. NOTE: this is a NON-fallback
+    // highlighter on purpose. CodeMirror's getHighlighters() returns the
+    // main highlighter facet if it's non-empty and ONLY falls back to the
+    // fallback facet when there are zero main highlighters — it does NOT
+    // merge per-tag. So a `{ fallback: true }` style here would be fully
+    // ignored (markdownHighlight already occupies the main facet), leaving
+    // code keywords/strings/etc. uncolored. Both must be main; precedence
+    // (array order) lets markdownHighlight win the markdown tags and this
+    // style cover everything else.
+    syntaxHighlighting(effective === 'dark' ? oneDarkHighlightStyle : defaultHighlightStyle),
   ];
 }
 
