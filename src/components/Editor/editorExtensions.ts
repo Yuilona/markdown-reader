@@ -73,53 +73,40 @@ function chromeTheme(dark: boolean): Extension {
   );
 }
 
-/** Markdown token highlight for the light palette. The Lezer markdown
- *  grammar maps headings to `tags.heading1..6`, emphasis/strong to their
- *  tags, inline+fenced code to `tags.monospace`, punctuation (markers)
- *  to `tags.processingInstruction`, and so on. */
-const lightHighlight = HighlightStyle.define([
-  { tag: t.heading1, color: '#0550ae', fontWeight: '700' },
-  { tag: t.heading2, color: '#0550ae', fontWeight: '700' },
-  { tag: [t.heading3, t.heading4, t.heading5, t.heading6], color: '#0969da', fontWeight: '600' },
-  { tag: t.strong, fontWeight: '700', color: '#1f2328' },
+/** Markdown token highlight wired to the app's CSS custom properties.
+ *  The Lezer markdown grammar maps headings to `tags.heading1..6`,
+ *  emphasis/strong to their tags, inline+fenced code to `tags.monospace`,
+ *  punctuation (markers) to `tags.processingInstruction`, and so on. A
+ *  single style serves both light and dark because the `var(--cm-*)`
+ *  colors resolve per the active `[data-theme]` (default GitHub palette
+ *  in theme.light.css / theme.dark.css, or any `data/user.css` override)
+ *  — no visual change for the default theme. */
+const markdownHighlight = HighlightStyle.define([
+  { tag: t.heading1, color: 'var(--cm-heading)', fontWeight: '700' },
+  { tag: t.heading2, color: 'var(--cm-heading)', fontWeight: '700' },
+  {
+    tag: [t.heading3, t.heading4, t.heading5, t.heading6],
+    color: 'var(--cm-heading-sub)',
+    fontWeight: '600',
+  },
+  { tag: t.strong, fontWeight: '700', color: 'var(--cm-strong)' },
   { tag: t.emphasis, fontStyle: 'italic' },
-  { tag: t.strikethrough, textDecoration: 'line-through', color: '#6e7781' },
-  { tag: [t.link, t.url], color: '#0969da', textDecoration: 'underline' },
-  { tag: t.monospace, color: '#cf222e' },
-  { tag: t.quote, color: '#6a737d', fontStyle: 'italic' },
-  { tag: t.list, color: '#0969da' },
-  { tag: t.processingInstruction, color: '#9a6700' },
-  { tag: t.labelName, color: '#116329' },
-  { tag: t.string, color: '#0a3069' },
-  { tag: t.contentSeparator, color: '#6e7781' },
-]);
-
-/** Markdown token highlight for the dark palette (GitHub dark values). */
-const darkHighlight = HighlightStyle.define([
-  { tag: t.heading1, color: '#79c0ff', fontWeight: '700' },
-  { tag: t.heading2, color: '#79c0ff', fontWeight: '700' },
-  { tag: [t.heading3, t.heading4, t.heading5, t.heading6], color: '#58a6ff', fontWeight: '600' },
-  { tag: t.strong, fontWeight: '700', color: '#e6edf3' },
-  { tag: t.emphasis, fontStyle: 'italic' },
-  { tag: t.strikethrough, textDecoration: 'line-through', color: '#8b949e' },
-  { tag: [t.link, t.url], color: '#58a6ff', textDecoration: 'underline' },
-  { tag: t.monospace, color: '#ff7b72' },
-  { tag: t.quote, color: '#8b949e', fontStyle: 'italic' },
-  { tag: t.list, color: '#58a6ff' },
-  { tag: t.processingInstruction, color: '#d29922' },
-  { tag: t.labelName, color: '#7ee787' },
-  { tag: t.string, color: '#a5d6ff' },
-  { tag: t.contentSeparator, color: '#8b949e' },
+  { tag: t.strikethrough, textDecoration: 'line-through', color: 'var(--cm-strikethrough)' },
+  { tag: [t.link, t.url], color: 'var(--cm-link)', textDecoration: 'underline' },
+  { tag: t.monospace, color: 'var(--cm-code)' },
+  { tag: t.quote, color: 'var(--cm-quote)', fontStyle: 'italic' },
+  { tag: t.list, color: 'var(--cm-list)' },
+  { tag: t.processingInstruction, color: 'var(--cm-marker)' },
+  { tag: t.labelName, color: 'var(--cm-label)' },
+  { tag: t.string, color: 'var(--cm-string)' },
+  { tag: t.contentSeparator, color: 'var(--cm-separator)' },
 ]);
 
 /** Resolve the chrome + highlight extension pair for the active app
  *  theme. `effective` is the resolved light/dark (never 'system') — the
  *  caller passes ThemeProvider's `effective`. */
 export function themeExtension(effective: 'light' | 'dark'): Extension {
-  return [
-    chromeTheme(effective === 'dark'),
-    syntaxHighlighting(effective === 'dark' ? darkHighlight : lightHighlight),
-  ];
+  return [chromeTheme(effective === 'dark'), syntaxHighlighting(markdownHighlight)];
 }
 
 /** Settings-driven extensions (R-EDIT-12): soft-wrap + indent width.

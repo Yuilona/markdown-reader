@@ -96,6 +96,22 @@
   /* ---- Generic text aliases the old CSS referenced (text, text-muted). ---- */
   --text: var(--fg-default);
   --text-muted: var(--fg-muted);
+
+  /* ---- CodeMirror markdown syntax token colors (GitHub light). Consumed
+       by markdownHighlight in editorExtensions.ts via var(); a user.css can
+       re-tint these without touching the editor code. ---- */
+  --cm-heading: #0550ae;
+  --cm-heading-sub: #0969da;
+  --cm-strong: #1f2328;
+  --cm-strikethrough: #6e7781;
+  --cm-link: #0969da;
+  --cm-code: #cf222e;
+  --cm-quote: #6a737d;
+  --cm-list: #0969da;
+  --cm-marker: #9a6700;
+  --cm-label: #116329;
+  --cm-string: #0a3069;
+  --cm-separator: #6e7781;
 }
 
 /* Override github-markdown-css variables for the markdown body so our
