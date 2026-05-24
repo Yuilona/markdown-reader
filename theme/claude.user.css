@@ -102,9 +102,9 @@
   --cm-string: #8a6d3b;
   --cm-separator: #73726c;
 
-  /* Scrollbar (document + editor) — Claude ink on warm paper. */
-  --claude-scrollbar: #1f1e1d59;
-  --claude-scrollbar-hover: #5a5959;
+  /* Scrollbar (document + editor) — quiet warm taupe, nearly invisible. */
+  --claude-scrollbar: rgba(95, 75, 55, 0.32);
+  --claude-scrollbar-hover: rgba(95, 75, 55, 0.55);
 }
 
 /* github-markdown-css base variables for the body subtree (light). */
@@ -181,9 +181,9 @@
   --cm-string: #c9a567;
   --cm-separator: #9a9c92;
 
-  /* Scrollbar (document + editor) — warm light ink on charcoal. */
-  --claude-scrollbar: #dedcd159;
-  --claude-scrollbar-hover: #a5a49d;
+  /* Scrollbar (document + editor) — quiet warm light on charcoal. */
+  --claude-scrollbar: rgba(222, 220, 209, 0.30);
+  --claude-scrollbar-hover: rgba(222, 220, 209, 0.52);
 }
 
 :root[data-theme='dark'] .markdown-body {
@@ -344,16 +344,13 @@
  * Themed scrollbars (Claude). WebView2 is Chromium, so ::-webkit-scrollbar
  * applies to the document scroll area AND the editor's .cm-scroller.
  * ===================================================================== */
-::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
   background: var(--claude-scrollbar);
   border-radius: 8px;
-  border: 2px solid transparent;
-  background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--claude-scrollbar-hover);
-  background-clip: content-box;
 }
 ::-webkit-scrollbar-corner { background: transparent; }
