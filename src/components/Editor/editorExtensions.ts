@@ -30,65 +30,48 @@ import type { EditorSettings } from '../../lib/settings';
 
 const GUTTER_FONT = 'var(--font-stack-code)';
 
-const lightChrome = EditorView.theme(
-  {
-    '&': {
-      color: '#1f2328',
-      backgroundColor: '#ffffff',
+/** Editor chrome (background, cursor, selection, gutter, active line,
+ *  search/selection match) wired to the app's CSS custom properties so
+ *  the editor follows whatever palette is active — the default GitHub
+ *  palette (theme.light.css / theme.dark.css) or any `data/user.css`
+ *  override — with no visual change for the default theme. The color
+ *  values are identical var() references for light and dark (they
+ *  resolve per active `[data-theme]`); only the `dark` flag handed to
+ *  CM6 differs, which it still needs for its internal light/dark logic. */
+function chromeTheme(dark: boolean): Extension {
+  return EditorView.theme(
+    {
+      '&': {
+        color: 'var(--fg-default)',
+        backgroundColor: 'var(--bg-canvas)',
+      },
+      '.cm-content': { caretColor: 'var(--accent)' },
+      '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--accent)' },
+      '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection':
+        { backgroundColor: 'var(--bg-active)' },
+      '.cm-activeLine': { backgroundColor: 'var(--bg-hover)' },
+      '.cm-gutters': {
+        backgroundColor: 'var(--bg-canvas)',
+        color: 'var(--fg-subtle)',
+        border: 'none',
+        fontFamily: GUTTER_FONT,
+      },
+      '.cm-activeLineGutter': {
+        backgroundColor: 'var(--bg-hover)',
+        color: 'var(--fg-default)',
+      },
+      '.cm-foldPlaceholder': {
+        backgroundColor: 'var(--bg-elevated)',
+        border: 'none',
+        color: 'var(--fg-subtle)',
+      },
+      '.cm-selectionMatch': { backgroundColor: 'var(--accent-bg-soft)' },
+      '.cm-searchMatch': { backgroundColor: 'var(--accent-bg-soft)' },
+      '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: 'var(--bg-active)' },
     },
-    '.cm-content': { caretColor: '#1f2328' },
-    '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#1f2328' },
-    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection':
-      { backgroundColor: '#0969da26' },
-    '.cm-activeLine': { backgroundColor: '#f6f8fa80' },
-    '.cm-gutters': {
-      backgroundColor: '#ffffff',
-      color: '#8c959f',
-      border: 'none',
-      fontFamily: GUTTER_FONT,
-    },
-    '.cm-activeLineGutter': { backgroundColor: '#f6f8fa', color: '#1f2328' },
-    '.cm-foldPlaceholder': {
-      backgroundColor: '#eaeef2',
-      border: 'none',
-      color: '#6e7781',
-    },
-    '.cm-selectionMatch': { backgroundColor: '#bbdfff80' },
-    '.cm-searchMatch': { backgroundColor: '#fae17d80' },
-    '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: '#ffd33d80' },
-  },
-  { dark: false },
-);
-
-const darkChrome = EditorView.theme(
-  {
-    '&': {
-      color: '#e6edf3',
-      backgroundColor: '#0d1117',
-    },
-    '.cm-content': { caretColor: '#e6edf3' },
-    '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#e6edf3' },
-    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection':
-      { backgroundColor: '#1f6feb44' },
-    '.cm-activeLine': { backgroundColor: '#161b2280' },
-    '.cm-gutters': {
-      backgroundColor: '#0d1117',
-      color: '#6e7681',
-      border: 'none',
-      fontFamily: GUTTER_FONT,
-    },
-    '.cm-activeLineGutter': { backgroundColor: '#161b22', color: '#e6edf3' },
-    '.cm-foldPlaceholder': {
-      backgroundColor: '#21262d',
-      border: 'none',
-      color: '#8b949e',
-    },
-    '.cm-selectionMatch': { backgroundColor: '#3fb95040' },
-    '.cm-searchMatch': { backgroundColor: '#bb800950' },
-    '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: '#bb800980' },
-  },
-  { dark: true },
-);
+    { dark },
+  );
+}
 
 /** Markdown token highlight for the light palette. The Lezer markdown
  *  grammar maps headings to `tags.heading1..6`, emphasis/strong to their
@@ -133,9 +116,10 @@ const darkHighlight = HighlightStyle.define([
  *  theme. `effective` is the resolved light/dark (never 'system') — the
  *  caller passes ThemeProvider's `effective`. */
 export function themeExtension(effective: 'light' | 'dark'): Extension {
-  return effective === 'dark'
-    ? [darkChrome, syntaxHighlighting(darkHighlight)]
-    : [lightChrome, syntaxHighlighting(lightHighlight)];
+  return [
+    chromeTheme(effective === 'dark'),
+    syntaxHighlighting(effective === 'dark' ? darkHighlight : lightHighlight),
+  ];
 }
 
 /** Settings-driven extensions (R-EDIT-12): soft-wrap + indent width.
