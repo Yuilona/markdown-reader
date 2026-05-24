@@ -49,3 +49,8 @@ coverage/
 # --- TS project-references emit (composite mode in tsconfig.node.json) ---
 vite.config.js
 vite.config.d.ts
+.ace-tool/
+
+# --- Theme source (large personal Typora theme zip + extracted fonts) ---
+theme/*.zip
+theme/_extracted/

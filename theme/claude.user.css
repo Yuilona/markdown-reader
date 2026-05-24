@@ -1,0 +1,359 @@
+/* =====================================================================
+ * Claude "Quiet Serif / 静衬线" theme — port for markdown-reader
+ * ---------------------------------------------------------------------
+ * Adapted from the Typora theme (theme/_extracted/claude.css + -dark.css)
+ * to this app's DOM (`.markdown-body` + standard elements + Shiki code).
+ *
+ * INSTALL
+ *   1. Install the three font folders shipped with the original theme
+ *      (Anthropic Serif/Sans/Mono Web + Noto Serif SC). Without them the
+ *      stacks fall back to Georgia / system-ui / ui-monospace.
+ *   2. Copy this file to  <安装目录>/data/user.css  and restart the app
+ *      (user.css is loaded once at startup; no hot reload).
+ *
+ * HOW IT WORKS
+ *   - Most of the skin is done by REDEFINING the app's own palette tokens
+ *     (the same ones theme.light.css / theme.dark.css set), so app chrome,
+ *     code-block background, frontmatter, mermaid container and the accent
+ *     all re-tint automatically.
+ *   - A second layer restyles the Markdown content elements (serif body,
+ *     heading scale without GitHub's h1/h2 underline, links, inline code,
+ *     blockquote bar, hairline tables, hr, GitHub alerts).
+ *   - user.css is injected LAST in <head>, so these rules win ties over
+ *     github-markdown-css and the bundled theme files without !important
+ *     (except where an inline style must be beaten).
+ *
+ * NOT PORTED (different rendering pipeline / out of scope):
+ *   - Code SYNTAX token colors come from Shiki, not this CSS.
+ *   - Typora app chrome (sidebar / settings / source mode) — N/A here.
+ * ===================================================================== */
+
+/* ---- Font stacks (match the Typora theme) ------------------------- */
+:root {
+  --claude-serif: "Anthropic Serif Web Text", Georgia, "Times New Roman", "Noto Serif SC", serif;
+  --claude-sans: "Anthropic Sans Web Text", system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --claude-mono: "Anthropic Mono Variable", ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+/* =====================================================================
+ * LIGHT palette — redefine the app tokens to Claude's warm-paper values.
+ * `:root` covers the pre-ThemeProvider paint; `[data-theme='light']`
+ * covers user-forced light.
+ * ===================================================================== */
+:root,
+:root[data-theme='light'] {
+  --bg-canvas: #faf9f5;
+  --bg-app: #faf9f5;
+  --bg-surface: #f5f4ed;
+  --bg-elevated: #ffffff;
+  --bg-hover: #f0eee6;
+  --bg-active: #e8e6dc;
+  --bg-code-block: rgba(255, 255, 255, 0.5);
+
+  --fg-default: #141413;
+  --fg-muted: #3d3d3a;
+  --fg-subtle: #73726c;
+  --fg-on-accent: #ffffff;
+  --fg-link: #141413;
+  --fg-link-hover: #d97757;
+
+  --border-default: #1f1e1d4d;
+  --border-muted: #1f1e1d26;
+  --border-strong: #1f1e1d99;
+
+  --accent: #d97757;             /* Claude orange */
+  --accent-bg-soft: rgba(217, 119, 87, 0.07);
+
+  --bg-codeblock-toolbar: rgba(255, 255, 255, 0.7);
+  --bg-codeblock-toolbar-hover: #ffffff;
+  --fg-codeblock-lang: #73726c;
+
+  --bg-frontmatter: #f5f4ed;
+  --bg-frontmatter-body: rgba(255, 255, 255, 0.5);
+
+  --bg-mermaid-container: rgba(255, 255, 255, 0.5);
+  --bg-mermaid-toolbar: rgba(255, 255, 255, 0.85);
+
+  --btn-bg: #ffffff;
+  --btn-bg-hover: #f5f4ed;
+  --btn-bg-active: #e8e6dc;
+  --logo-bg: #d97757;
+
+  /* Claude-specific content colors used by the element rules below. */
+  --claude-code-fg: #8a2424;     /* inline code text */
+  --claude-quote-fg: #3d3d3a;
+  --claude-quote-bar: #1f1e1d1a;
+  --claude-th-border: #1f1e1d99;
+  --claude-td-border: #1f1e1d4d;
+  --claude-strong: inherit;      /* light: weight only */
+
+  /* CodeMirror markdown syntax tokens — warm-paper re-tint of the app's
+     --cm-* defaults (consumed by markdownHighlight in the editor). */
+  --cm-heading: #b0532f;
+  --cm-heading-sub: #bd7a52;
+  --cm-strong: #141413;
+  --cm-strikethrough: #73726c;
+  --cm-link: #d97757;
+  --cm-code: #8a2424;
+  --cm-quote: #3d3d3a;
+  --cm-list: #d97757;
+  --cm-marker: #a16207;
+  --cm-label: #6f7d4a;
+  --cm-string: #8a6d3b;
+  --cm-separator: #73726c;
+
+  /* Scrollbar (document + editor) — Claude ink on warm paper. */
+  --claude-scrollbar: #1f1e1d59;
+  --claude-scrollbar-hover: #5a5959;
+}
+
+/* github-markdown-css base variables for the body subtree (light). */
+:root .markdown-body,
+:root[data-theme='light'] .markdown-body {
+  --bgColor-default: #faf9f5;
+  --bgColor-muted: #f0eee6;
+  --fgColor-default: #141413;
+  --fgColor-muted: #3d3d3a;
+  --fgColor-accent: #d97757;
+  --borderColor-default: #1f1e1d4d;
+  --borderColor-muted: #1f1e1d26;
+}
+
+/* =====================================================================
+ * DARK palette — warm charcoal.
+ * ===================================================================== */
+:root[data-theme='dark'] {
+  --bg-canvas: #262624;
+  --bg-app: #1f1e1d;
+  --bg-surface: #30302e;
+  --bg-elevated: #30302e;
+  --bg-hover: #141413;
+  --bg-active: #1f1e1d;
+  --bg-code-block: rgba(48, 48, 46, 0.5);
+
+  --fg-default: #faf9f5;
+  --fg-muted: #c2c0b6;
+  --fg-subtle: #9a9c92;
+  --fg-on-accent: #ffffff;
+  --fg-link: #faf9f5;
+  --fg-link-hover: #d4b06d;       /* gold on hover in dark */
+
+  --border-default: #dedcd14d;
+  --border-muted: #dedcd126;
+  --border-strong: #dedcd199;
+
+  --accent: #d97757;
+  --accent-bg-soft: rgba(217, 119, 87, 0.12);
+
+  --bg-codeblock-toolbar: rgba(48, 48, 46, 0.85);
+  --bg-codeblock-toolbar-hover: #3a3a37;
+  --fg-codeblock-lang: #9a9c92;
+
+  --bg-frontmatter: #30302e;
+  --bg-frontmatter-body: rgba(48, 48, 46, 0.5);
+
+  --bg-mermaid-container: #30302e;
+  --bg-mermaid-toolbar: rgba(48, 48, 46, 0.9);
+
+  --btn-bg: #30302e;
+  --btn-bg-hover: #3a3a37;
+  --btn-bg-active: #1f1e1d;
+  --logo-bg: #d97757;
+
+  --claude-code-fg: #f4a9a9;
+  --claude-quote-fg: #c2c0b6;
+  --claude-quote-bar: #dedcd126;
+  --claude-th-border: #dedcd199;
+  --claude-td-border: #dedcd14d;
+  --claude-strong: #e6987d;       /* dark: bold shifts to salmon */
+
+  /* CodeMirror markdown syntax tokens — warm charcoal re-tint. */
+  --cm-heading: #e8a07f;
+  --cm-heading-sub: #d9b09a;
+  --cm-strong: #e6987d;
+  --cm-strikethrough: #9a9c92;
+  --cm-link: #d4b06d;
+  --cm-code: #f4a9a9;
+  --cm-quote: #c2c0b6;
+  --cm-list: #d4b06d;
+  --cm-marker: #c9a567;
+  --cm-label: #a9b58a;
+  --cm-string: #c9a567;
+  --cm-separator: #9a9c92;
+
+  /* Scrollbar (document + editor) — warm light ink on charcoal. */
+  --claude-scrollbar: #dedcd159;
+  --claude-scrollbar-hover: #a5a49d;
+}
+
+:root[data-theme='dark'] .markdown-body {
+  --bgColor-default: #262624;
+  --bgColor-muted: #30302e;
+  --fgColor-default: #faf9f5;
+  --fgColor-muted: #c2c0b6;
+  --fgColor-accent: #d4b06d;
+  --borderColor-default: #dedcd14d;
+  --borderColor-muted: #dedcd126;
+}
+
+/* =====================================================================
+ * CONTENT element styling (`.markdown-body`)
+ * ===================================================================== */
+
+/* Serif body + Claude page width. */
+.markdown-body {
+  font-family: var(--claude-serif);
+  max-width: 752px;
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+/* App chrome (titlebar, status bar, empty state) → sans. */
+.app-root {
+  font-family: var(--claude-sans);
+}
+
+/* Headings: Claude scale, no GitHub h1/h2 underline, ink color. */
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-family: var(--claude-serif);
+  color: var(--fg-default);
+  border-bottom: none;
+  padding-bottom: 0;
+  line-height: 1.4;
+}
+.markdown-body h1 { font-size: 1.6rem; font-weight: 700; margin: 1.6rem 0 0.6rem; }
+.markdown-body h2 { font-size: 1.3rem; font-weight: 700; margin: 1.4rem 0 0.5rem; }
+.markdown-body h3 { font-size: 1.12rem; font-weight: 700; margin: 1.1rem 0 0.4rem; }
+.markdown-body h4 { font-size: 1rem; font-weight: 700; margin: 1rem 0 0.3rem; }
+.markdown-body h5,
+.markdown-body h6 { font-size: 0.9rem; font-weight: 600; margin: 0.9rem 0 0.3rem; }
+
+/* Links: ink + underline at rest, accent on hover. */
+.markdown-body a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.markdown-body a:hover {
+  color: var(--fg-link-hover);
+  text-decoration-color: var(--fg-link-hover);
+}
+
+/* Strong: dark mode shifts color (light keeps plain weight). */
+.markdown-body strong { color: var(--claude-strong); font-weight: 700; }
+
+/* Inline code (brick red light / soft pink dark). The pre-code reset
+ * below keeps fenced-code spans painted by Shiki. */
+.markdown-body code,
+.markdown-body tt {
+  font-family: var(--claude-mono);
+  font-size: 0.9rem;
+  color: var(--claude-code-fg);
+  background-color: rgba(61, 61, 58, 0.05);
+  border: 0.5px solid var(--border-muted);
+  border-radius: 0.4rem;
+  padding: 1px 0.3rem;
+}
+:root[data-theme='dark'] .markdown-body code,
+:root[data-theme='dark'] .markdown-body tt {
+  background-color: rgba(194, 192, 182, 0.05);
+}
+/* Fenced code: let the container token (--bg-code-block) + Shiki spans
+ * do the work; reset the inline-code chrome here. */
+.markdown-body pre code,
+.markdown-body pre tt {
+  color: var(--fg-default);
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: 0.875rem;
+}
+.markdown-body pre {
+  font-family: var(--claude-mono);
+  border: 0.5px solid var(--border-muted);
+  border-radius: 8px;
+}
+
+/* Blockquote: thin ink bar, muted serif text, no bg. */
+.markdown-body blockquote {
+  color: var(--claude-quote-fg);
+  border-left: 4px solid var(--claude-quote-bar);
+  background: none;
+  padding: 0 1rem;
+}
+
+/* Horizontal rule: single hairline. */
+.markdown-body hr {
+  height: 1px;
+  border: 0;
+  border-top: 1px solid var(--border-default);
+  background: none;
+  margin: 1.4rem 0;
+}
+
+/* Tables: borderless except hairline row rules; no zebra, no radius. */
+.markdown-body table { border: none; display: table; width: 100%; }
+.markdown-body table tr { background: none; border: none; }
+.markdown-body table tr:nth-child(2n) { background: none; }
+.markdown-body table th,
+.markdown-body table td {
+  border: none;
+  border-bottom: 1px solid var(--claude-td-border);
+  padding: 0.5rem 1rem 0.5rem 0;
+  font-size: 0.9rem;
+}
+.markdown-body table th {
+  border-bottom: 1.5px solid var(--claude-th-border);
+  font-weight: 700;
+  text-align: left;
+}
+
+/* GitHub alerts (remark-github-blockquote-alert) → Claude callouts. */
+.markdown-body .markdown-alert {
+  border-radius: 8px;
+  border: 1px solid var(--alert-border, var(--border-muted));
+  border-left: 3px solid var(--alert-accent, var(--accent));
+  background: var(--alert-bg, var(--accent-bg-soft));
+  padding: 0.7rem 0.9rem;
+}
+.markdown-body .markdown-alert .markdown-alert-title {
+  font-family: var(--claude-sans);
+  font-weight: 700;
+  color: var(--alert-accent, var(--accent));
+}
+.markdown-body .markdown-alert-note    { --alert-accent: #5d7d9a; --alert-bg: rgba(93,125,154,0.10);  --alert-border: rgba(93,125,154,0.22); }
+.markdown-body .markdown-alert-tip     { --alert-accent: #688a5d; --alert-bg: rgba(104,138,93,0.11);  --alert-border: rgba(104,138,93,0.24); }
+.markdown-body .markdown-alert-important { --alert-accent: #8b6f9d; --alert-bg: rgba(139,111,157,0.11); --alert-border: rgba(139,111,157,0.24); }
+.markdown-body .markdown-alert-warning { --alert-accent: #ad7837; --alert-bg: rgba(173,120,55,0.12);  --alert-border: rgba(173,120,55,0.25); }
+.markdown-body .markdown-alert-caution { --alert-accent: #b45f51; --alert-bg: rgba(180,95,81,0.11);   --alert-border: rgba(180,95,81,0.24); }
+
+:root[data-theme='dark'] .markdown-body .markdown-alert-note    { --alert-accent: #88a9c7; --alert-bg: rgba(136,169,199,0.10); --alert-border: rgba(136,169,199,0.24); }
+:root[data-theme='dark'] .markdown-body .markdown-alert-tip     { --alert-accent: #91b685; --alert-bg: rgba(145,182,133,0.11); --alert-border: rgba(145,182,133,0.24); }
+:root[data-theme='dark'] .markdown-body .markdown-alert-important { --alert-accent: #b69acd; --alert-bg: rgba(182,154,205,0.11); --alert-border: rgba(182,154,205,0.24); }
+:root[data-theme='dark'] .markdown-body .markdown-alert-warning { --alert-accent: #d6a15e; --alert-bg: rgba(214,161,94,0.12);  --alert-border: rgba(214,161,94,0.25); }
+:root[data-theme='dark'] .markdown-body .markdown-alert-caution { --alert-accent: #d88678; --alert-bg: rgba(216,134,120,0.11); --alert-border: rgba(216,134,120,0.24); }
+
+/* =====================================================================
+ * Themed scrollbars (Claude). WebView2 is Chromium, so ::-webkit-scrollbar
+ * applies to the document scroll area AND the editor's .cm-scroller.
+ * ===================================================================== */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--claude-scrollbar);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--claude-scrollbar-hover);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-corner { background: transparent; }
