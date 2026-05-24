@@ -1,6 +1,6 @@
 [package]
 name = "markdown_reader"
-version = "1.0.0"
+version = "1.1.0"
 description = "A Markdown reader with first-class Mermaid support"
 authors = ["yuilona"]
 edition = "2021"

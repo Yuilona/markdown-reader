@@ -22,6 +22,8 @@ Typora 那种 WYSIWYG，也不做 Obsidian 的 vault。
 - Mermaid 全屏 lightbox（光标锚定缩放）
 - 图片点击全屏
 - 浅色 / 深色 / 跟随系统三主题，200ms 渐变过渡
+- 自定义主题：`data/user.css` 可整体换肤（阅读 + 编辑器 chrome + 语法 +
+  滚动条都跟随）；仓库内附带一套 Claude 风格主题 `theme/claude.user.css`
 - 标题栏页面缩放按钮（阅读模式，− / 百分比 / +，点百分比复位）+
   状态感知的最大化/还原图标
 - 文件内 Ctrl+F 搜索（支持大小写 / 整词 / 正则；跳过代码块外的
