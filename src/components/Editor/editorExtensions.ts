@@ -1,5 +1,11 @@
 import { EditorView } from '@codemirror/view';
-import { HighlightStyle, syntaxHighlighting, indentUnit } from '@codemirror/language';
+import {
+  HighlightStyle,
+  syntaxHighlighting,
+  indentUnit,
+  defaultHighlightStyle,
+} from '@codemirror/language';
+import { oneDarkHighlightStyle } from '@codemirror/theme-one-dark';
 import { tags as t } from '@lezer/highlight';
 import type { Extension } from '@codemirror/state';
 
@@ -106,7 +112,18 @@ const markdownHighlight = HighlightStyle.define([
  *  theme. `effective` is the resolved light/dark (never 'system') — the
  *  caller passes ThemeProvider's `effective`. */
 export function themeExtension(effective: 'light' | 'dark'): Extension {
-  return [chromeTheme(effective === 'dark'), syntaxHighlighting(markdownHighlight)];
+  return [
+    chromeTheme(effective === 'dark'),
+    // Markdown tokens (Claude/GitHub palette) — primary, takes precedence
+    // so headings/bold/etc. keep their existing colors.
+    syntaxHighlighting(markdownHighlight),
+    // Fenced-code tokens — fallback layer so per-language grammars get
+    // multi-color highlighting that's readable in both themes.
+    syntaxHighlighting(
+      effective === 'dark' ? oneDarkHighlightStyle : defaultHighlightStyle,
+      { fallback: true },
+    ),
+  ];
 }
 
 /** Settings-driven extensions (R-EDIT-12): soft-wrap + indent width.

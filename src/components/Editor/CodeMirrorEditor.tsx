@@ -12,6 +12,7 @@ import { useTheme } from '../ThemeProvider/useTheme';
 import { getSettings } from '../../lib/settingsStore';
 import { DEFAULT_EDITOR_SETTINGS, type EditorSettings } from '../../lib/settings';
 import { themeExtension, settingsExtension } from './editorExtensions';
+import { codeLanguages } from './codeLanguages';
 import { markdownActionsKeymap } from './markdownKeymap';
 import { flashLineExtension, flashEditorLine } from './flashLine';
 import styles from './CodeMirrorEditor.module.css';
@@ -95,7 +96,7 @@ function CodeMirrorEditor({ value, onChange }: CodeMirrorEditorProps) {
 
   const extensions = useMemo<Extension[]>(
     () => [
-      markdown(),
+      markdown({ codeLanguages }),
       markdownActionsKeymap,
       flashLineExtension,
       themeExtension(effective),
@@ -108,7 +109,13 @@ function CodeMirrorEditor({ value, onChange }: CodeMirrorEditorProps) {
   // basicSetup overrides — only lineNumbers is settings-driven; the rest
   // keep their defaults (history, multi-cursor, search, brackets, fold).
   const basicSetup = useMemo(
-    () => ({ lineNumbers: editorSettings.lineNumbers }),
+    () => ({
+      lineNumbers: editorSettings.lineNumbers,
+      // Disable @uiw's built-in syntaxHighlighting: it hardcodes the light
+      // defaultHighlightStyle (unreadable on the dark theme). We supply the
+      // theme-aware code-token highlighting ourselves via themeExtension.
+      syntaxHighlighting: false,
+    }),
     [editorSettings.lineNumbers],
   );
 
