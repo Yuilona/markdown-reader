@@ -13,6 +13,10 @@
   height: 100%;
   overflow-y: auto;
   background: var(--bg-canvas);
+  /* Positioning context so editor↔preview scroll-sync can sum `offsetTop`
+   * up the offsetParent chain and have it terminate here (layout-coordinate
+   * math that's invariant under body `zoom`). See useEditorScrollSync. */
+  position: relative;
 }
 
 /* Defensive specificity bump: `.scrollArea .article` (0,0,2,0) beats

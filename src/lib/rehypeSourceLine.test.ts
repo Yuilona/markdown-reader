@@ -3,12 +3,12 @@ import type { Root, Element } from 'hast';
 
 import { rehypeSourceLine, rehypeSourceLineApply, readSourceLine } from './rehypeSourceLine';
 
-function el(tagName: string, line: number): Element {
+function el(tagName: string, line: number, children: Element[] = []): Element {
   return {
     type: 'element',
     tagName,
     properties: {},
-    children: [],
+    children,
     position: {
       start: { line, column: 1, offset: 0 },
       end: { line, column: 1, offset: 0 },
@@ -31,6 +31,35 @@ describe('rehypeSourceLine (pre-Shiki pass)', () => {
     expect((tree.children[0] as Element).properties?.['data-source-line']).toBe(1);
     expect((tree.children[1] as Element).properties?.['data-source-line']).toBe(3);
     expect((tree.children[2] as Element).properties?.['data-source-line']).toBe(5);
+  });
+
+  it('stamps nested block descendants (table rows, list items) for finer mapping', () => {
+    const tbody = el('tbody', 10, [el('tr', 11), el('tr', 12), el('tr', 13)]);
+    const table = el('table', 10, [tbody]);
+    const list = el('ul', 20, [el('li', 20), el('li', 21)]);
+    const tree: Root = { type: 'root', children: [table, list] };
+    run(rehypeSourceLine, tree);
+
+    // Top-level blocks still stamped.
+    expect(table.properties?.['data-source-line']).toBe(10);
+    expect(list.properties?.['data-source-line']).toBe(20);
+    // Rows / items now carry their own line.
+    const rows = tbody.children as Element[];
+    expect(rows[0].properties?.['data-source-line']).toBe(11);
+    expect(rows[1].properties?.['data-source-line']).toBe(12);
+    expect(rows[2].properties?.['data-source-line']).toBe(13);
+    const items = list.children as Element[];
+    expect(items[0].properties?.['data-source-line']).toBe(20);
+    expect(items[1].properties?.['data-source-line']).toBe(21);
+  });
+
+  it('does not stamp inline descendants (em/code/a)', () => {
+    const p = el('p', 5, [el('em', 5), el('code', 5)]);
+    const tree: Root = { type: 'root', children: [p] };
+    run(rehypeSourceLine, tree);
+    const [em, code] = p.children as Element[];
+    expect(em.properties?.['data-source-line']).toBeUndefined();
+    expect(code.properties?.['data-source-line']).toBeUndefined();
   });
 });
 

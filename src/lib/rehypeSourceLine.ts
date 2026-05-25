@@ -34,18 +34,54 @@ const MAP_KEY = '__sourceLineByIndex';
 
 type RootWithMap = Root & { [MAP_KEY]?: Record<number, number> };
 
+/**
+ * Block-level descendant tags we ALSO stamp (beyond top-level blocks) so the
+ * editor↔preview sync can match a line INSIDE a tall block — e.g. a specific
+ * table row or list item — instead of only the block's start. Without this,
+ * clicking deep in a long table/list maps to the block top and the clicked
+ * content can land off-screen. Inline tags (em/strong/a/code/span/img) are
+ * deliberately excluded to avoid mid-line matches and DOM-attribute bloat.
+ */
+const NESTED_BLOCK_TAGS = new Set([
+  'li', 'tr', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'dt', 'dd',
+]);
+
+/** Recursively stamp block-level descendants with their own source line.
+ *  Skips a node that already carries a stamp. Not touched by Shiki (which
+ *  only replaces top-level code `<pre>`), so these survive without a
+ *  second pass. */
+function stampBlockDescendants(node: Element): void {
+  for (const child of node.children) {
+    if (child.type !== 'element') continue;
+    const childEl = child as Element;
+    const line = childEl.position?.start?.line;
+    if (line != null && NESTED_BLOCK_TAGS.has(childEl.tagName)) {
+      const props: Properties = childEl.properties ?? {};
+      if (props[LINE_KEY] == null) {
+        props[LINE_KEY] = line;
+        childEl.properties = props;
+      }
+    }
+    stampBlockDescendants(childEl);
+  }
+}
+
 export const rehypeSourceLine: Plugin<[], Root> = () => {
   return (tree) => {
     const map: Record<number, number> = {};
     tree.children.forEach((node, i) => {
       if (node.type !== 'element') return;
-      const line = node.position?.start?.line;
-      if (line == null) return;
       const el = node as Element;
-      const props: Properties = el.properties ?? {};
-      props[LINE_KEY] = line;
-      el.properties = props;
-      map[i] = line;
+      const line = el.position?.start?.line;
+      if (line != null) {
+        const props: Properties = el.properties ?? {};
+        props[LINE_KEY] = line;
+        el.properties = props;
+        map[i] = line;
+      }
+      // Stamp finer-grained block descendants regardless of whether the
+      // top-level node itself had position info.
+      stampBlockDescendants(el);
     });
     (tree as RootWithMap)[MAP_KEY] = map;
   };

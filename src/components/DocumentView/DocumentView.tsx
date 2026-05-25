@@ -193,6 +193,10 @@ export function DocumentView({
     };
   }, []);
   const lineOffset = useMemo(() => frontmatterLineOffset(frontmatterRaw), [frontmatterRaw]);
+  // Body line count (frontmatter-stripped) in the SAME coordinate system as
+  // the data-source-line stamps — lets the sync hook interpolate inside the
+  // last block. Derived from `body` (debounced), matching what's rendered.
+  const totalBodyLines = useMemo(() => body.split('\n').length, [body]);
   // One-shot guard: a preview click jumps the editor cursor, which would
   // otherwise echo back through the editor→preview sync and re-scroll the
   // preview the user just clicked. handlePreviewClick raises this; the sync
@@ -205,6 +209,7 @@ export function DocumentView({
     articleRef,
     cursorLine: cursor?.line ?? null,
     lineOffset,
+    totalBodyLines,
     suppressRef: suppressPreviewScrollRef,
   });
 
