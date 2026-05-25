@@ -29,6 +29,21 @@
   gap: 12px;
   max-width: 480px;
   text-align: center;
+  /* Cap at the container's content box so a long recent list can't push the
+   * logo/buttons off-screen. The fixed header rows stay put (flex-shrink:0)
+   * and the recent list scrolls internally — see `.recent` / `.recentList`.
+   * When the content is short it still centers (container justifies center). */
+  max-height: 100%;
+  min-height: 0;
+  width: 100%;
+}
+
+/* Header rows never shrink — only the recent list gives up space + scrolls. */
+.logo,
+.hint,
+.hintSub,
+.actions {
+  flex-shrink: 0;
 }
 
 .logo {
@@ -110,6 +125,12 @@
 .recent {
   margin-top: 32px;
   width: 100%;
+  /* The shrinkable region: when `.content` would overflow, this column
+   * gives up height and its list scrolls (rather than clipping the page).
+   * `min-height: 0` lets it shrink below its content's intrinsic height. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .recentTitle {
@@ -119,6 +140,7 @@
   color: var(--fg-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  flex-shrink: 0; /* title stays; only the list below scrolls */
 }
 
 .recentEmpty {
@@ -135,6 +157,13 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  /* Scroll the list itself (not the whole page) when there are many recent
+   * files; `min-height: 0` is required for a flex child to be allowed to
+   * shrink + scroll. A little right padding keeps rows clear of the thin
+   * scrollbar when it appears. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .recentItem {
