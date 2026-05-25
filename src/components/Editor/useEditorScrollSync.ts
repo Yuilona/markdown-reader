@@ -7,45 +7,50 @@ import { useEffect, useRef, type RefObject } from 'react';
  * preview block (via the `data-source-line` stamps from rehypeSourceLine)
  * and:
  *   - briefly flash-highlight it (`.source-line-flash`) so the eye can
- *     find the corresponding rendered line — this is the editor→preview
- *     half of the click-to-highlight feature, and runs whenever edit mode
- *     is active.
- *   - scroll it to the top of the preview, but ONLY when
+ *     find the corresponding rendered line — the editor→preview half of
+ *     the click-to-highlight feature; runs whenever edit mode is active.
+ *   - scroll it into a comfortable position, but ONLY when
  *     `settings.editor.scrollSync` is on.
  *
- * Editor→preview only (no reverse): the preview→editor direction is a
- * click handler in DocumentView that calls `jumpToEditorLine`.
+ * Scroll positioning:
+ *   - Short blocks are centered in the viewport.
+ *   - Blocks TALLER than the viewport (long tables, big mermaid/KaTeX) are
+ *     TOP-aligned with a small margin — centering their geometric middle
+ *     would push the block's top off-screen (the old bug: "jumped too high /
+ *     not visible").
+ *   - Because mermaid/KaTeX lay out asynchronously, the target's measured
+ *     position right after a cursor change can be stale. We re-apply the
+ *     scroll on the next animation frame and once more shortly after, so the
+ *     block settles into place after async render. All deferred passes are
+ *     cancelled on cleanup so a newer cursor change wins.
  *
- * Mapping: the cursor line is full-buffer; subtract `lineOffset`
- * (frontmatter lines) to get the BODY line the stamps use, then take the
- * block whose `data-source-line` is the largest value ≤ the target.
+ * Echo suppression (`suppressRef`):
+ *   A preview CLICK moves the editor cursor (preview→editor jump), which
+ *   would re-trigger THIS effect and scroll the preview the user just
+ *   clicked — jarring. DocumentView sets `suppressRef` right before such a
+ *   jump; we consume it once and skip the scroll+flash for that change.
  *
- * Debounced 50ms so a held arrow key / line-spanning edit coalesces.
+ * Mapping: cursor line is full-buffer; subtract `lineOffset` (frontmatter
+ * lines) to get the BODY line the stamps use, then take the block whose
+ * `data-source-line` is the largest value ≤ the target. Debounced 50ms.
  */
 
 interface ScrollSyncOptions {
-  /** Edit mode active (preview is the split right pane). */
   editActive: boolean;
-  /** settings.editor.scrollSync — gates the scroll, not the flash. */
   scrollSync: boolean;
-  /** Preview scroll container. */
   scrollRef: RefObject<HTMLElement | null>;
-  /** Article root to query `[data-source-line]` within. */
   articleRef: RefObject<HTMLElement | null>;
-  /** 1-indexed editor cursor line (full-buffer), or null. */
   cursorLine: number | null;
-  /** Frontmatter line count to subtract (0 when no frontmatter). */
   lineOffset: number;
+  /** Set true by a preview-click jump so the resulting cursor change does
+   *  NOT scroll/flash the preview back (consumed once). Mutable holder
+   *  (we write `.current`), so not React's readonly `RefObject`. */
+  suppressRef?: { current: boolean };
 }
 
-/** Add the flash class, restarting the CSS animation if it's already
- *  present (remove → reflow → add), then strip it after the animation. */
-function flashElement(el: HTMLElement): void {
-  el.classList.remove('source-line-flash');
-  void el.offsetWidth; // force reflow so the animation replays
-  el.classList.add('source-line-flash');
-  window.setTimeout(() => el.classList.remove('source-line-flash'), 2000);
-}
+/** px gap left above a top-aligned tall block / above a centered block's
+ *  clamp, so the target never kisses the very top edge. */
+const TOP_MARGIN = 24;
 
 export function useEditorScrollSync({
   editActive,
@@ -54,13 +59,51 @@ export function useEditorScrollSync({
   articleRef,
   cursorLine,
   lineOffset,
+  suppressRef,
 }: ScrollSyncOptions): void {
   const timerRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const lateTimerRef = useRef<number | null>(null);
+  const flashTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!editActive || cursorLine == null) return;
 
+    // Add the flash class, restarting the animation if already present, then
+    // strip it after the animation. A single shared timer is cancelled on the
+    // next flash so an older flash's clear can't cut a newer one short.
+    const flashElement = (el: HTMLElement) => {
+      if (flashTimerRef.current !== null) clearTimeout(flashTimerRef.current);
+      el.classList.remove('source-line-flash');
+      void el.offsetWidth; // force reflow so the animation replays
+      el.classList.add('source-line-flash');
+      flashTimerRef.current = window.setTimeout(() => {
+        el.classList.remove('source-line-flash');
+        flashTimerRef.current = null;
+      }, 2000);
+    };
+
+    // Scroll the target into a comfortable position (center, or top-align
+    // when it's taller than the viewport). Recomputed each pass so async
+    // layout (mermaid/KaTeX) settles correctly.
+    const applyScroll = (scroller: HTMLElement, target: HTMLElement) => {
+      const containerRect = scroller.getBoundingClientRect();
+      const elRect = target.getBoundingClientRect();
+      const fitsCentered = elRect.height < containerRect.height - TOP_MARGIN;
+      const delta = fitsCentered
+        ? elRect.top - containerRect.top - (containerRect.height / 2 - elRect.height / 2)
+        : elRect.top - containerRect.top - TOP_MARGIN; // tall → top-align
+      scroller.scrollTop += delta;
+    };
+
     const run = () => {
+      // Consume a one-shot suppression (preview-click echo): skip scroll AND
+      // flash so clicking a preview block doesn't scroll the preview back.
+      if (suppressRef?.current) {
+        suppressRef.current = false;
+        return;
+      }
+
       const scroller = scrollRef.current;
       const article = articleRef.current;
       if (!scroller || !article) return;
@@ -88,26 +131,27 @@ export function useEditorScrollSync({
       }
 
       if (scrollSync) {
-        // Center the target block in the preview viewport (rather than
-        // top-aligning it) so the flashed block sits where the eye is
-        // already looking. Clamped implicitly by the scroll bounds, so
-        // blocks near the top/bottom of the doc just scroll as far as
-        // they can.
-        const containerRect = scroller.getBoundingClientRect();
-        const elRect = target.getBoundingClientRect();
-        const delta =
-          elRect.top - containerRect.top - (containerRect.height / 2 - elRect.height / 2);
-        scroller.scrollTop += delta;
+        applyScroll(scroller, target);
+        // Re-correct after async layout (mermaid/KaTeX). Both deferred passes
+        // are cancelled on cleanup if a newer cursor change supersedes.
+        rafRef.current = window.requestAnimationFrame(() => {
+          rafRef.current = null;
+          if (target) applyScroll(scroller, target);
+        });
+        lateTimerRef.current = window.setTimeout(() => {
+          lateTimerRef.current = null;
+          if (target) applyScroll(scroller, target);
+        }, 160);
       }
       flashElement(target);
     };
 
     timerRef.current = window.setTimeout(run, 50);
     return () => {
-      if (timerRef.current !== null) {
-        window.clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      if (lateTimerRef.current !== null) clearTimeout(lateTimerRef.current);
+      timerRef.current = rafRef.current = lateTimerRef.current = null;
     };
-  }, [editActive, scrollSync, cursorLine, lineOffset, scrollRef, articleRef]);
+  }, [editActive, scrollSync, cursorLine, lineOffset, scrollRef, articleRef, suppressRef]);
 }

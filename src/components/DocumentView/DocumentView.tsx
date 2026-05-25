@@ -193,6 +193,11 @@ export function DocumentView({
     };
   }, []);
   const lineOffset = useMemo(() => frontmatterLineOffset(frontmatterRaw), [frontmatterRaw]);
+  // One-shot guard: a preview click jumps the editor cursor, which would
+  // otherwise echo back through the editor→preview sync and re-scroll the
+  // preview the user just clicked. handlePreviewClick raises this; the sync
+  // hook consumes it once and skips that scroll.
+  const suppressPreviewScrollRef = useRef(false);
   useEditorScrollSync({
     editActive: editTextProvided,
     scrollSync: scrollSyncEnabled,
@@ -200,6 +205,7 @@ export function DocumentView({
     articleRef,
     cursorLine: cursor?.line ?? null,
     lineOffset,
+    suppressRef: suppressPreviewScrollRef,
   });
 
   // Preview → editor (bidirectional line sync): clicking a rendered block
@@ -221,6 +227,9 @@ export function DocumentView({
       if (!block) return;
       const bodyLine = Number(block.getAttribute('data-source-line'));
       if (!Number.isFinite(bodyLine)) return;
+      // Suppress the editor→preview scroll that the resulting cursor move
+      // would otherwise trigger (don't scroll the block the user clicked).
+      suppressPreviewScrollRef.current = true;
       jumpToEditorLine(bodyLine + lineOffset);
     },
     [editTextProvided, jumpToEditorLine, lineOffset],

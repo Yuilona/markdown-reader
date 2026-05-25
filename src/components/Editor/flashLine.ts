@@ -41,6 +41,12 @@ const flashLineField = StateField.define<DecorationSet>({
 /** Editor extension: install the flash-line decoration field. */
 export const flashLineExtension = flashLineField;
 
+/** Pending clear timer for the editor flash. A single shared handle so a
+ *  rapid second jump cancels the first jump's clear — otherwise the older
+ *  2s timer fires `setFlashLine.of(null)` and snuffs the NEWER flash, which
+ *  looked like the highlight "vanished instantly". */
+let pendingClear: number | null = null;
+
 /**
  * Move the cursor to `lineNum` (1-indexed, clamped), center it, focus the
  * editor, and flash-highlight the line for ~2s (matches the CSS animation
@@ -50,12 +56,14 @@ export function flashEditorLine(view: EditorView, lineNum: number): void {
   const total = view.state.doc.lines;
   const ln = Math.max(1, Math.min(lineNum, total));
   const line = view.state.doc.line(ln);
+  if (pendingClear !== null) clearTimeout(pendingClear);
   view.dispatch({
     selection: { anchor: line.from },
     effects: [setFlashLine.of(ln), EditorView.scrollIntoView(line.from, { y: 'center' })],
   });
   view.focus();
-  window.setTimeout(() => {
+  pendingClear = window.setTimeout(() => {
+    pendingClear = null;
     // The view may have been torn down (mode switch) before the timeout.
     try {
       view.dispatch({ effects: setFlashLine.of(null) });
