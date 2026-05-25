@@ -34,6 +34,51 @@
    * force the fallback for characters the subset CAN render. */
 }
 
+/* Claude-theme bundled fonts (R-THEME-bundle).
+ *
+ * Four open, SIL OFL-1.1 faces vendored as fingerprinted woff2 under
+ * src/assets/fonts/ (see LICENSE-*.txt next to each). They're declared
+ * here — NOT inside the theme's user.css — so the families resolve from
+ * the app's own 'self' origin (no CSP change) regardless of which theme
+ * is active. @font-face is free until a rule actually uses the family,
+ * so this costs nothing for users who aren't on the Claude theme.
+ *
+ *   - Source Serif 4 / Inter / JetBrains Mono: Latin-subset variable.
+ *   - Noto Serif SC: subset variable (common GB2312/GBK + Latin +
+ *     punctuation, ~8.4 MB) — the Claude theme's CJK serif body. Generous
+ *     font-weight ranges; the browser clamps to the axis extent.
+ *
+ * The proprietary "Anthropic *" families the theme lists FIRST are never
+ * bundled (licensing) — they resolve only if the user installed them. */
+@font-face {
+  font-family: 'Source Serif 4';
+  src: url('../assets/fonts/source-serif-4-latin-var.woff2') format('woff2');
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('../assets/fonts/inter-latin-var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../assets/fonts/jetbrains-mono-latin-var.woff2') format('woff2');
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Serif SC';
+  src: url('../assets/fonts/noto-serif-sc-subset-var.woff2') format('woff2');
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* Font-family stacks exposed as CSS variables so any module can opt in
  * by writing `font-family: var(--font-stack-body)`. */
 :root {

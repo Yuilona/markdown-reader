@@ -16,7 +16,8 @@
 - `user.css` 在**启动时一次性读取**，作为 `<style>` 注入到 `<head>` **最末尾**。
 - 因为在最后，它的优先级在同特异性下**胜过**内置样式（`github-markdown-css` 和 app 自带的 `theme.*.css`）——所以**大多数情况不需要 `!important`**。
 - **没有热重载**：改完 `user.css` 必须重启 app 才生效。
-- 文件不存在 = 正常（用默认主题），不会报错。
+- **首次运行自动播种**：若 `user.css` 不存在且从未播种过，app 会把内置的 Claude「Quiet Serif」主题（`theme/claude.user.css` 的内容）写入 `data/user.css` 并启用，同时写一个 `data/.theme-seeded` 标记。所以全新安装开箱即是 Claude 风。
+- **想回默认风格**：删掉 `data/user.css` 重启即可——`.theme-seeded` 标记会阻止它被重新生成（尊重你的删除）。想换自己的主题就直接覆盖 `user.css` 内容（已存在的文件**永不**被自动覆盖）。
 
 ### 开发时调试
 
@@ -184,11 +185,27 @@ WebView2 是 Chromium 内核，用 `::-webkit-scrollbar` 即可（会同时作�
 
 ## 6. 字体
 
-`user.css` 不打包字体。要用自定义字体，先把字体**安装到系统**，再在 CSS 里按字体族名引用，并留好回退链：
+`user.css` 自身不打包字体，但 **app 本体已内置 4 款开源字体（SIL OFL-1.1）**，通过 `src/styles/fonts.css` 的 `@font-face` 从程序自身加载（`'self'` 源，无需联网、无需装系统字体）。你的 `user.css` 可**直接按族名引用**它们：
+
+| 族名 | 角色 |
+|---|---|
+| `Source Serif 4` | 英文衬线正文 |
+| `Inter` | 无衬线 / chrome |
+| `JetBrains Mono` | 等宽代码 |
+| `Noto Serif SC` | **中文衬线正文**（子集，约 8.4MB） |
 
 ```css
-.markdown-body { font-family: "Your Serif", Georgia, "Noto Serif SC", serif; }
+/* 直接用内置字体，开箱即有；前面可再放系统专有字体作首选，没装会自动落到内置 */
+.markdown-body { font-family: "Source Serif 4", "Noto Serif SC", Georgia, serif; }
 ```
+
+要用**其它**自定义字体（不在上面四款内），仍需先把字体**安装到系统**，再按族名引用，并留好回退链：
+
+```css
+.markdown-body { font-family: "Your Serif", "Source Serif 4", Georgia, "Noto Serif SC", serif; }
+```
+
+> 想再内置新字体（而非装系统）：把 woff2 放进 `src/assets/fonts/`、在 `src/styles/fonts.css` 加一条 `@font-face`，Vite 会自动指纹化打包——见 `src/assets/fonts/README.md`。
 
 ---
 

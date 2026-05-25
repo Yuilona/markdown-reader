@@ -22,9 +22,13 @@ Typora 那种 WYSIWYG，也不做 Obsidian 的 vault。
 - Mermaid 全屏 lightbox（光标锚定缩放）
 - 图片点击全屏
 - 浅色 / 深色 / 跟随系统三主题，200ms 渐变过渡
+- 开箱即用的 Claude「Quiet Serif」主题：首次启动自动写入 `data/user.css` 并启用，
+  内置 Source Serif 4 / Inter / JetBrains Mono + 思源宋体（Noto Serif SC）子集四款
+  开源字体（OFL，随程序加载，无需安装系统字体），中英文都是衬线观感；想回到默认
+  风格删掉 `data/user.css` 重启即可（不会被重新生成）
 - 自定义主题：`data/user.css` 可整体换肤（阅读 + 编辑器 chrome + 语法 +
-  滚动条都跟随）；仓库内附带一套 Claude 风格主题 `theme/claude.user.css`，
-  主题开发指南见 [`docs/theming.md`](docs/theming.md)
+  滚动条都跟随）；主题源文件 `theme/claude.user.css`，开发指南见
+  [`docs/theming.md`](docs/theming.md)
 - 标题栏页面缩放按钮（阅读模式，− / 百分比 / +，点百分比复位）+
   状态感知的最大化/还原图标
 - 文件内 Ctrl+F 搜索（支持大小写 / 整词 / 正则；跳过代码块外的
@@ -146,7 +150,8 @@ app 把所有持久化数据放在**安装目录下的 `data/` 子文件夹**。
 | `recent.json` | 最近 10 文件（LRU、去重） |
 | `scroll-positions.json` | 每文件滚动位置（LRU 100） |
 | `window.json` | 窗口尺寸 / 位置 / 最大化状态（启动时恢复） |
-| `user.css` | 用户自定义样式（启动时一次性加载，写在 `<head>` 最末） |
+| `user.css` | 用户自定义样式（启动时一次性加载，写在 `<head>` 最末）；首次运行自动写入 Claude 主题，删除后重启不再重建 |
+| `.theme-seeded` | 标记 Claude 主题已播种过一次（删 `user.css` 后据此不再重建，尊重用户选择） |
 | `logs/app.log` | 滚动日志（5MB 上限 + 7 天保留 `.bak`） |
 
 > 仍无 GUI 设置面板，要改主题以外的设置（页面缩放区间、默认显示 TOC、
@@ -228,6 +233,11 @@ app 把所有持久化数据放在**安装目录下的 `data/` 子文件夹**。
 - [svg-pan-zoom](https://github.com/ariutta/svg-pan-zoom)
 - [panzoom (anvaka)](https://github.com/anvaka/panzoom)
 - [Sarasa Gothic](https://github.com/be5invis/Sarasa-Gothic)（CJK 字体）
+- Claude 主题内置字体（均 SIL OFL-1.1）：
+  [Source Serif 4](https://github.com/adobe-fonts/source-serif)、
+  [Inter](https://github.com/rsms/inter)、
+  [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono)、
+  [Noto Serif SC / Source Han Serif](https://github.com/notofonts/noto-cjk)
 
 ## License
 

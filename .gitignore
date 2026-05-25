@@ -52,5 +52,9 @@ vite.config.d.ts
 .ace-tool/
 
 # --- Theme source (large personal Typora theme zip + extracted fonts) ---
+# Contains proprietary Anthropic TTFs + multi-MB Noto Serif SC source —
+# never commit. The bundled woff2 in src/assets/fonts/ are derived from
+# these (Noto subset) or fetched from @fontsource (Latin) and ARE tracked.
 theme/*.zip
 theme/_extracted/
+theme/主题V14.0/

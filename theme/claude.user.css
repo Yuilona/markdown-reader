@@ -28,11 +28,20 @@
  *   - Typora app chrome (sidebar / settings / source mode) — N/A here.
  * ===================================================================== */
 
-/* ---- Font stacks (match the Typora theme) ------------------------- */
+/* ---- Font stacks (match the Typora theme) -------------------------
+ * 3-tier chain per family: (1) the proprietary "Anthropic *" face FIRST
+ * — used only if the user happens to have it installed (claude.ai web
+ * font; we never bundle it); (2) the app-bundled open near-match
+ * (Source Serif 4 / Inter / JetBrains Mono + Noto Serif SC for CJK,
+ * registered via @font-face in src/styles/fonts.css, so these resolve
+ * out-of-box inside this app); (3) system / generic fallbacks. Outside
+ * this app (e.g. copied into Typora) tiers 2 fall through to Georgia etc.
+ * "Noto Serif SC" is the CJK serif body — bundled, so Chinese renders in
+ * serif out-of-box; Latin glyphs prefer the serif/sans faces ahead of it. */
 :root {
-  --claude-serif: "Anthropic Serif Web Text", Georgia, "Times New Roman", "Noto Serif SC", serif;
-  --claude-sans: "Anthropic Sans Web Text", system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --claude-mono: "Anthropic Mono Variable", ui-monospace, "Cascadia Code", Consolas, monospace;
+  --claude-serif: "Anthropic Serif Web Text", "Source Serif 4", Georgia, "Times New Roman", "Noto Serif SC", serif;
+  --claude-sans: "Anthropic Sans Web Text", "Inter", system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --claude-mono: "Anthropic Mono Variable", "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
 }
 
 /* =====================================================================
