@@ -58,3 +58,10 @@ vite.config.d.ts
 theme/*.zip
 theme/_extracted/
 theme/主题V14.0/
+
+# --- Personal build notes (instructs embedding proprietary fonts; keep local,
+# do not publish to the public repo) ---
+docs/personal-build-anthropic-fonts.md
+src/assets/fonts/anthropic-*.woff2
+src/assets/fonts/zhanku-*.woff2
+src/assets/fonts/unifraktur-*.woff2
