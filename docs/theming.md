@@ -166,7 +166,7 @@ YAML frontmatter 是一个可折叠的 `<details>`，正文 `<pre>` 带稳定属
 | `--cm-string` | 链接标题等字符串 |
 | `--cm-separator` | 分隔线 |
 
-编辑器里围栏代码块（```js / ```python …）的**语言级语法高亮**用的是 CodeMirror 的内置高亮（亮色 `defaultHighlightStyle`、暗色 one-dark），不通过 `--cm-*`，目前不暴露给 `user.css`。编辑器的背景/光标/选区/行号等 **chrome** 则跟随上面 §2.2 的调色板令牌（`--bg-canvas` / `--fg-default` / `--accent` / `--bg-hover` 等），所以你改了调色板，编辑器外观会一起变。
+编辑器里围栏代码块（```js / ```python …）的**语言级语法高亮**用的是 CodeMirror 的内置高亮（亮色 `defaultHighlightStyle`、暗色 one-dark），不通过 `--cm-*`，目前不暴露给 `user.css`。这套围栏高亮也覆盖 **```mermaid**（手写 StreamLanguage）、**```latex / ```tex**（stex），以及 **`$…$` / `$$…$$` 数学公式**（编辑器内嵌了一个 markdown 数学扩展，把公式内容交给 stex 上色；`$` 定界符走 `--cm-marker`）。编辑器的背景/光标/选区/行号等 **chrome** 则跟随上面 §2.2 的调色板令牌（`--bg-canvas` / `--fg-default` / `--accent` / `--bg-hover` 等），所以你改了调色板，编辑器外观会一起变。
 
 ---
 

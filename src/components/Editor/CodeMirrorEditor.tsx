@@ -13,6 +13,7 @@ import { getSettings } from '../../lib/settingsStore';
 import { DEFAULT_EDITOR_SETTINGS, type EditorSettings } from '../../lib/settings';
 import { themeExtension, settingsExtension } from './editorExtensions';
 import { codeLanguages } from './codeLanguages';
+import { Math as mathMarkdown } from './mathMarkdown';
 import { markdownActionsKeymap } from './markdownKeymap';
 import { flashLineExtension, flashEditorLine } from './flashLine';
 import styles from './CodeMirrorEditor.module.css';
@@ -96,7 +97,7 @@ function CodeMirrorEditor({ value, onChange }: CodeMirrorEditorProps) {
 
   const extensions = useMemo<Extension[]>(
     () => [
-      markdown({ codeLanguages }),
+      markdown({ codeLanguages, extensions: [mathMarkdown] }),
       markdownActionsKeymap,
       flashLineExtension,
       themeExtension(effective),

@@ -90,4 +90,20 @@ export const codeLanguages: LanguageDescription[] = [
         (m) => new LanguageSupport(StreamLanguage.define(m.shell)),
       ),
   }),
+  LanguageDescription.of({
+    name: 'LaTeX',
+    alias: ['latex', 'tex'],
+    load: () =>
+      import('@codemirror/legacy-modes/mode/stex').then(
+        (m) => new LanguageSupport(StreamLanguage.define(m.stex)),
+      ),
+  }),
+  LanguageDescription.of({
+    name: 'Mermaid',
+    alias: ['mmd'],
+    load: () =>
+      import('./mermaidStream').then(
+        (m) => new LanguageSupport(StreamLanguage.define(m.mermaidLang)),
+      ),
+  }),
 ];
