@@ -71,6 +71,22 @@ export function Toc({
   // Track the ids we're observing so we can disconnect/reconnect when
   // the headings list changes (e.g. file reload).
   const observerRef = useRef<IntersectionObserver | null>(null);
+  // When a TOC item is clicked we smooth-scroll to it AND pin the
+  // highlight to it. Without this, the IntersectionObserver fires for
+  // every heading the smooth-scroll passes through and drags the
+  // highlight down the list — looking like it "slides" from the old
+  // section to the clicked one. While `clickedIdRef` is set we ignore
+  // intermediate headings and only release the lock once the observer
+  // confirms arrival at the target (or the fallback timer fires).
+  const clickedIdRef = useRef<string | null>(null);
+  const clickTimerRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+    },
+    [],
+  );
 
   // ---- IntersectionObserver: set `currentId` as user scrolls. ----
   useEffect(() => {
@@ -117,7 +133,19 @@ export function Toc({
           bestId = id;
         }
       }
-      if (bestId) setCurrentId(bestId);
+      if (!bestId) return;
+      // A click-initiated smooth-scroll is in flight: hold the highlight
+      // on the clicked target, ignoring the headings we pass through.
+      // Release only once we've actually arrived at the target.
+      if (clickedIdRef.current) {
+        if (bestId !== clickedIdRef.current) return;
+        clickedIdRef.current = null;
+        if (clickTimerRef.current) {
+          clearTimeout(clickTimerRef.current);
+          clickTimerRef.current = null;
+        }
+      }
+      setCurrentId(bestId);
     };
 
     const obs = new IntersectionObserver(handleEntries, {
@@ -151,6 +179,17 @@ export function Toc({
     // relative to the visible scroll viewport — no offset needed.
     const el = document.getElementById(id);
     if (!el) return;
+    // Pin the highlight to the clicked target and ignore the observer's
+    // intermediate updates until the smooth-scroll settles on it. The
+    // fallback timer releases the lock in case the target can never
+    // become the topmost heading (e.g. the last heading on a short tail),
+    // so normal scroll-spy resumes instead of staying stuck.
+    clickedIdRef.current = id;
+    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+    clickTimerRef.current = window.setTimeout(() => {
+      clickedIdRef.current = null;
+      clickTimerRef.current = null;
+    }, 1200);
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     setCurrentId(id);
   };

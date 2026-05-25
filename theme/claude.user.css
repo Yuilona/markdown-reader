@@ -209,8 +209,16 @@
  * CONTENT element styling (`.markdown-body`)
  * ===================================================================== */
 
-/* Serif body + Claude page width. */
-.markdown-body {
+/* Serif body + Claude page width.
+ *
+ * The selector is doubled (`.markdown-body.markdown-body`) on purpose: the
+ * article element carries BOTH `.article` and `.markdown-body`, and the
+ * app's `.scrollArea .article { max-width: 820px }` has specificity
+ * (0,0,2,0). A plain `.markdown-body` (0,0,1,0) loses to it regardless of
+ * source order, so the intended Claude reading width never applied. The
+ * doubled class ties at (0,0,2,0) and, being injected last in <head>, wins
+ * the tie — making 752px actually take effect. */
+.markdown-body.markdown-body {
   font-family: var(--claude-serif);
   max-width: 752px;
   font-size: 1rem;
@@ -308,11 +316,28 @@
 }
 
 /* Tables: borderless except hairline row rules; no zebra, no radius.
- * Do NOT override github-markdown-css's `display:block; width:max-content;
- * max-width:100%; overflow:auto` — that's what keeps a wide table scrolling
- * horizontally inside the content column instead of overflowing the right
- * edge. We only restyle borders/spacing here. */
-.markdown-body table { border: none; }
+ *
+ * Sizing model (github-markdown-css scroll box: `display:block;
+ * width:max-content; max-width:100%; overflow-x:auto`) with per-content
+ * wrapping rules:
+ *   - Prose / CJK text WRAPS normally and honors authored `<br>` breaks,
+ *     so a long description never becomes one giant unbroken line.
+ *   - Inline `code` never breaks (`white-space:nowrap`) — long identifiers
+ *     like `Sensor:ElectromagneticSpectrumSensor` stay intact rather than
+ *     splitting mid-token (which looked bad). When code makes a row wider
+ *     than the column, the whole table scrolls horizontally.
+ *   - `min-width` floors each column so the auto layout can't starve a
+ *     short CJK column down to one-character-per-line (vertical text) when
+ *     it reflows to fit the cap.
+ * Net: no vertical text, no ugly mid-token code breaks, prose still wraps,
+ * and genuinely wide (code-heavy) tables scroll instead of overflowing. */
+.markdown-body table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border: none;
+}
 .markdown-body table tr { background: none; border: none; }
 .markdown-body table tr:nth-child(2n) { background: none; }
 .markdown-body table th,
@@ -321,6 +346,13 @@
   border-bottom: 1px solid var(--claude-td-border);
   padding: 0.5rem 1rem 0.5rem 0;
   font-size: 0.9rem;
+  white-space: normal;
+  overflow-wrap: normal;
+  min-width: 5em;
+}
+/* Inline code in a cell stays on one line; the table scrolls if needed. */
+.markdown-body table :is(td, th) code {
+  white-space: nowrap;
 }
 .markdown-body table th {
   border-bottom: 1.5px solid var(--claude-th-border);
