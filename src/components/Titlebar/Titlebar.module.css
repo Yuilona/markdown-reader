@@ -14,40 +14,49 @@
   height: 32px;
   display: flex;
   align-items: stretch;
-  justify-content: space-between;
+  justify-content: flex-end;
   background: var(--titlebar-bg);
   color: var(--titlebar-fg);
   user-select: none;
   -webkit-user-select: none;
   border-bottom: 1px solid var(--titlebar-border);
   flex: 0 0 auto;
+  /* Anchor for the absolutely-positioned .title below. */
+  position: relative;
+  /* Width of the right-side control cluster. Used as symmetric padding on
+   * .title so the centered text remains visually centered relative to the
+   * VIEWPORT (not just relative to "left edge → controls.left"). The
+   * :has(.zoomGroup) rule widens it when the read-mode zoom trio is
+   * present, keeping the center exact across modes. */
+  --controls-w: 220px;
 }
 
-/* v1.0 PR-A: title is centered. We keep `flex: 1 1 auto` so the title
- * cell fills the remaining width between the left edge and the
- * controls cluster on the right; `text-align: center` centers the
- * text within that cell. The leading drag-region is still here so the
- * user can drag the window anywhere on the title bar.
+.titlebar:has(.zoomGroup) {
+  --controls-w: 320px;
+}
+
+/* Title cell spans the WHOLE titlebar (absolute, inset: 0) and centers its
+ * text with `text-align: center` + symmetric `padding: 0 var(--controls-w)`.
+ * Symmetric padding is the trick: the inner content box is centered on the
+ * viewport, so centered text lands on the geometric viewport center —
+ * regardless of how wide the right-side controls cluster is.
  *
- * Note: the visual centering is anchored to the title cell's bounds,
- * NOT to the viewport center. With a 4-button controls cluster on the
- * right (~180px wide) the title's visual center is slightly left of
- * the geometric viewport center. That's fine: the user reads the
- * title in context with the surrounding chrome, not against a ruler. */
+ * The element is still `data-tauri-drag-region` so dragging works
+ * everywhere on the title bar. Controls come AFTER it in DOM and
+ * therefore paint on top, so button clicks still hit the buttons. */
 .title {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 12px;
+  position: absolute;
+  inset: 0;
+  padding: 0 var(--controls-w);
   font-size: 12px;
   font-weight: 400;
+  line-height: 32px;
   color: var(--titlebar-fg);
-  flex: 1 1 auto;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: center;
+  box-sizing: border-box;
 }
 
 .controls {
