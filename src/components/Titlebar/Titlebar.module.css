@@ -63,6 +63,15 @@
   display: flex;
   align-items: stretch;
   flex: 0 0 auto;
+  /* CSS paint order puts positioned siblings ABOVE non-positioned ones,
+   * regardless of DOM order. Without these two declarations the absolutely
+   * positioned .title (which spans the full titlebar) paints on top of the
+   * in-flow controls cluster and swallows every button click + the Tauri
+   * drag-region too. Making .controls positioned with z-index: 1 lifts it
+   * above the abs-positioned title so buttons receive events again, while
+   * the underlying .title still picks up drag in the empty areas. */
+  position: relative;
+  z-index: 1;
 }
 
 /* Win11 caption-button standard size: 46x32 px. */
