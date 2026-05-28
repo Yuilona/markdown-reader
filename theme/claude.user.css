@@ -110,6 +110,7 @@
   --cm-label: #6f7d4a;
   --cm-string: #8a6d3b;
   --cm-separator: #73726c;
+  --cm-selection-bg: rgba(217, 119, 87, 0.50);
 
   /* Scrollbar (document + editor) — quiet warm taupe, nearly invisible. */
   --claude-scrollbar: rgba(95, 75, 55, 0.32);
@@ -189,6 +190,7 @@
   --cm-label: #a9b58a;
   --cm-string: #c9a567;
   --cm-separator: #9a9c92;
+  --cm-selection-bg: rgba(217, 119, 87, 0.55);
 
   /* Scrollbar (document + editor) — quiet warm light on charcoal. */
   --claude-scrollbar: rgba(222, 220, 209, 0.30);

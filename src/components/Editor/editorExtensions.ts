@@ -53,9 +53,35 @@ function chromeTheme(dark: boolean): Extension {
       },
       '.cm-content': { caretColor: 'var(--accent)' },
       '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--accent)' },
-      '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection':
-        { backgroundColor: 'var(--bg-active)' },
-      '.cm-activeLine': { backgroundColor: 'var(--bg-hover)' },
+      // Selection background. CodeMirror's basicSetup enables
+      // drawSelection(), so mouse selection is painted by an overlay DOM
+      // layer (`.cm-selectionLayer .cm-selectionBackground`), not just by
+      // the browser's native `::selection`.
+      //
+      // CM6's base theme writes focused rules with its light/dark scope:
+      //   &light.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground
+      //   &dark.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground
+      // That compiles to five class selectors. The duplicated target class
+      // below is intentional: it bumps specificity to six, so this theme
+      // wins without relying on stylesheet insertion order or !important.
+      '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground.cm-selectionBackground':
+        { background: 'var(--cm-selection-bg)' },
+      '.cm-selectionLayer .cm-selectionBackground': {
+        background: 'var(--cm-selection-bg)',
+      },
+      '.cm-content ::selection': { background: 'var(--cm-selection-bg)' },
+      // Active-line tint must remain TRANSLUCENT — the .cm-selectionLayer
+      // sits at inline z-index:-1 (CM6 draw-selection assigns this), so
+      // .cm-activeLine (z:auto, inside .cm-content) paints OVER the selection.
+      // If bg-hover is opaque (it is in the GitHub light/dark + Claude light
+      // palettes — e.g. #f0eee6 in Claude light), the active row HIDES the
+      // selection on the very line the cursor is on, which is precisely the
+      // row a mouse-drag selection always occupies. Mixing to ~45% alpha lets
+      // the orange/blue selection tint show through while still hinting the
+      // active row. color-mix is supported by Win11 WebView2 (Chromium ≥111).
+      '.cm-activeLine': {
+        backgroundColor: 'color-mix(in srgb, var(--bg-hover) 45%, transparent)',
+      },
       '.cm-gutters': {
         backgroundColor: 'var(--bg-canvas)',
         color: 'var(--fg-subtle)',

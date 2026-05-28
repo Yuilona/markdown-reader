@@ -104,6 +104,7 @@
   --cm-label: #7ee787;
   --cm-string: #a5d6ff;
   --cm-separator: #8b949e;
+  --cm-selection-bg: rgba(47, 129, 247, 0.48);
 }
 
 /* Override github-markdown-css variables for the markdown body. Mirrors
