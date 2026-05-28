@@ -1,0 +1,2 @@
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Captured the CodeMirror 6 drawSelection overlay contract and selector-specificity requirement so future editor chrome changes do not target only native ::selection."}
+{"file":".trellis/tasks/05-28-editor-selection-highlight/research/root-cause.md","reason":"Recorded root-cause evidence from @codemirror/view and why previous low-specificity/native-selection fixes failed."}

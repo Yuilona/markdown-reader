@@ -1,0 +1,2 @@
+{"file":".trellis/tasks/05-28-editor-selection-highlight/prd.md","reason":"Acceptance criteria and verification commands for the editor selection highlight bugfix."}
+{"file":".trellis/tasks/05-28-editor-selection-highlight/research/root-cause.md","reason":"Confirms verification focus: CodeMirror overlay DOM, base-theme specificity, and dedicated selection token."}
