@@ -49,13 +49,11 @@
     "react-markdown": "^10.1.0",
     "rehype-katex": "^7.0.1",
     "rehype-slug": "^6.0.0",
-    "remark-frontmatter": "^5.0.0",
     "remark-gfm": "^4.0.1",
     "remark-github-blockquote-alert": "^2.1.0",
     "remark-math": "^6.0.0",
     "shiki": "^4.0.2",
-    "svg-pan-zoom": "^3.6.2",
-    "yaml": "^2.9.0"
+    "svg-pan-zoom": "^3.6.2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0",

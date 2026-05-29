@@ -1,6 +1,5 @@
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
-import remarkFrontmatter from 'remark-frontmatter';
 import { remarkAlert } from 'remark-github-blockquote-alert';
 import rehypeKatex from 'rehype-katex';
 import rehypeSlug from 'rehype-slug';
@@ -60,13 +59,8 @@ const highlighter = await createHighlighterCore({
 /** Remark plugins (run on the mdast). The YAML frontmatter is stripped
  * BEFORE this pipeline runs, by `splitFrontmatter` in `parseFrontmatter.ts`
  * (see DocumentView.tsx) — the dedicated splitter keeps the body
- * frontmatter-free so we don't need a custom extractor plugin here.
- * `remark-frontmatter` is still wired in defensively in case markdown
- * with a leading `---` block ever bypasses the splitter (e.g. via
- * future `[next.md](#)` link routing). */
+ * frontmatter-free, so no frontmatter plugin is needed here. */
 export const remarkPlugins: PluggableList = [
-  // Parse YAML / TOML front-matter blocks (we only enable `yaml` for v0.1).
-  [remarkFrontmatter, ['yaml']],
   // GitHub Flavored Markdown: tables, task lists, strikethrough, autolinks, footnotes.
   remarkGfm,
   // `$x$` and `$$x$$` math syntax → `math` / `inlineMath` nodes (rendered later by KaTeX).

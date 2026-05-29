@@ -598,7 +598,9 @@ function buildComponents(opts: BuildComponentsOptions): Components {
  * Resolve a markdown `<img src>` to a URL the WebView can load.
  *
  *   - empty / undefined → undefined (caller renders placeholder).
- *   - data: / blob: / http(s): → return as-is (R6.3).
+ *   - http(s): → return as-is (R6.3). data: / blob: / other protocols are
+ *     blanked by react-markdown's defaultUrlTransform before this runs, so
+ *     only http(s) and bare local paths actually reach here.
  *   - absolute local path (Windows `C:\...` / `/...` / UNC) → convertFileSrc.
  *   - relative local path → resolve against `docDir`, then convertFileSrc.
  *
@@ -614,13 +616,9 @@ export function resolveImageSrc(src: string | undefined, docDir: string): string
   const trimmed = src.trim();
   if (!trimmed) return undefined;
 
-  // Pass-through schemes.
-  if (
-    trimmed.startsWith('data:') ||
-    trimmed.startsWith('blob:') ||
-    trimmed.startsWith('http://') ||
-    trimmed.startsWith('https://')
-  ) {
+  // Pass-through remote schemes. (data: / blob: are blanked upstream by
+  // react-markdown's defaultUrlTransform, so they never reach here.)
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed;
   }
 

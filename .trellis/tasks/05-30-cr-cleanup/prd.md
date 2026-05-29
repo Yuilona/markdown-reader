@@ -52,12 +52,14 @@
 
 ## Acceptance Criteria
 
-- [ ] `package.json` 不再含 `yaml`、`remark-frontmatter`；`pnpm install` 后 lockfile 干净
-- [ ] `markdownPlugins.ts` 无 `remark-frontmatter`；frontmatter 折叠卡片渲染正常
-- [ ] `resolveImageSrc` 无 `data:`/`blob:` 死分支，相关注释更正；本地相对图 + 远程 http 图仍正常
-- [ ] 磁盘 `vite.config.js` 已删；`pnpm build` 仍正常（确认未加载该文件）
-- [ ] #19 决定已落实（移除+验证 或 保留+注释）
-- [ ] `pnpm exec tsc --noEmit` + `pnpm test` + `pnpm build` 全通过；无运行行为变化
+- [x] `package.json` 不再含 `yaml`、`remark-frontmatter`；`pnpm install` 剪掉 2 直接依赖（连带 −6 子依赖），lockfile 干净
+- [x] `markdownPlugins.ts` 无 `remark-frontmatter`（import + 插件项 + 注释均移除）；frontmatter 仍由上游 `splitFrontmatter` 剥离、`Frontmatter.tsx` 折叠卡片渲染路径不变
+- [x] `resolveImageSrc` 无 `data:`/`blob:` 死分支（保留 http(s)），注释更正；唯一调用方 img override（`DocumentView.tsx:574`），body 图永远拿不到 data:/blob:（被 `defaultUrlTransform` blank）
+- [x] 磁盘 `vite.config.js` 已删，并在 `tsconfig.node.json` 加 `emitDeclarationOnly` 让 `tsc -b` 不再 emit `.js`（改产出 gitignored 的 `.d.ts`）；`tsc -b --force` 验证后 `vite.config.js` 不再出现，`pnpm build` 正常
+- [x] #19 决定：**保留** `@codemirror/search`（运行时经 @uiw basicSetup 传递性使用；移除仅丢版本 pin、无 bundle 收益）
+- [x] `pnpm exec tsc --noEmit`(0) + `pnpm test`(44/44) + `pnpm build`(ok) 全通过；grep 确认 src 无遗留引用；无运行行为变化
+
+> 建议（可选）：在 app 内对一份含 YAML frontmatter + 本地相对图片 + 远程图片的文档做一次目检，确认渲染与改动前一致。
 
 ## Out of Scope
 
