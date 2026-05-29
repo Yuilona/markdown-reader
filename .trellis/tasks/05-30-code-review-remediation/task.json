@@ -1,0 +1,31 @@
+{
+  "id": "code-review-remediation",
+  "name": "code-review-remediation",
+  "title": "Code-review remediation: security / perf / cleanup / correctness",
+  "description": "Remediate the 28 adversarially-confirmed findings from the 2026-05-30 full code review. Parent owns the finding inventory + cross-cutting acceptance; work split into 4 independently-verifiable children.",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "hbw",
+  "assignee": "hbw",
+  "createdAt": "2026-05-30",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "05-30-cr-cleanup",
+    "05-30-cr-security",
+    "05-30-cr-performance",
+    "05-30-cr-correctness"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
