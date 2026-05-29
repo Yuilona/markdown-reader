@@ -4,7 +4,8 @@ import CodeMirror, {
   type ViewUpdate,
 } from '@uiw/react-codemirror';
 import { markdown } from '@codemirror/lang-markdown';
-import { EditorView } from '@codemirror/view';
+import { EditorView, keymap } from '@codemirror/view';
+import { indentWithTab } from '@codemirror/commands';
 import type { Extension } from '@codemirror/state';
 
 import { useEditMode } from '../EditModeProvider/useEditMode';
@@ -29,6 +30,10 @@ import styles from './CodeMirrorEditor.module.css';
  *     `markdownKeymap` (smart list continuation, R-EDIT-1.7: Enter in
  *     `- item` inserts `- `; empty list line clears the marker).
  *   - `markdownActionsKeymap` — Ctrl+B/I/K/Shift+K tools (R-EDIT-7).
+ *   - `keymap.of([indentWithTab])` — Tab / Shift+Tab indent the
+ *     selection. CM6 leaves Tab unbound by default (it stays a
+ *     focus-move / literal tab); this restores the Tab/Shift+Tab
+ *     indent behavior documented in the README shortcut table.
  *   - `themeExtension(effective)` — GitHub light/dark palette + token
  *     highlight. Reconfigures live on theme flip (R-EDIT-11), preserving
  *     cursor + scroll because the EditorState is untouched.
@@ -99,6 +104,7 @@ function CodeMirrorEditor({ value, onChange }: CodeMirrorEditorProps) {
     () => [
       markdown({ codeLanguages, extensions: [mathMarkdown] }),
       markdownActionsKeymap,
+      keymap.of([indentWithTab]),
       flashLineExtension,
       themeExtension(effective),
       settingsExtension(editorSettings),
