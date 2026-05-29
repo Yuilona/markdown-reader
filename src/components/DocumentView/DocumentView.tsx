@@ -19,7 +19,7 @@ import { DEFAULT_EDITOR_SETTINGS } from '../../lib/settings';
 import { useContextMenu, type ContextMenuItem } from '../ContextMenu/ContextMenuContext';
 import { useStatusBar } from '../StatusBar/StatusBarContext';
 import { useToast } from '../Toast/useToast';
-import { openLinkInBrowser, copyLinkAddress, copyImageToClipboard, saveImageToDisk, openImageInSystem } from './documentActions';
+import { openLinkInBrowser, copyLinkAddress, copyImageToClipboard, saveImageToDisk } from './documentActions';
 
 // Vendor CSS pulled directly from node_modules — no copy in src/styles
 // per the PR-2 brief. Vite resolves these at bundle time.
@@ -320,10 +320,6 @@ export function DocumentView({
         {
           label: '另存为…',
           onClick: () => void saveImageToDisk(resolvedSrc, filenameGuess, toast),
-        },
-        {
-          label: '在系统中打开',
-          onClick: () => void openImageInSystem(resolvedSrc, toast),
         },
       ];
       ctxMenu.open(event.clientX, event.clientY, items);

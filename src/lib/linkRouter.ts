@@ -10,12 +10,15 @@ import * as logger from './logger';
  * Five cases, exhaustively handled below:
  *   1. Anchor / hash-only (`#heading`): smooth-scroll within doc.
  *   2. External http(s): `shell.open` → system default browser.
- *   3. mailto/tel/etc: `shell.open` → system default handler.
+ *   3. mailto: `shell.open` → system default mail handler.
  *   4. Local `.md` / `.markdown`: load in current window via
  *      `LinkRouterContext.openDocument` (App.tsx wires this to the
  *      shared `setDocFromPath` so recent.json + watcher + scroll
  *      memory all update through the canonical funnel).
- *   5. Local other file: `shell.open(absolutePath)` → system default app.
+ *   5. Local other file: deliberately NOT opened — we never hand an
+ *      arbitrary doc-supplied local path to `shell.open` (a hostile .md
+ *      could point it at an .exe/.hta). Shows an "unsupported" notice.
+ *      (cr-security #2/#5)
  *
  * Any thrown error from `shellOpen` is caught and surfaced via the
  * provided `onError(message)` callback, which App.tsx hooks to the
@@ -52,7 +55,11 @@ export type LinkKind =
   | { kind: 'local-other'; absolutePath: string }
   | { kind: 'empty' };
 
-const PROTOCOL_PREFIXES = ['mailto:', 'tel:', 'sms:', 'ftp:', 'ftps:'];
+// Only `mailto:` survives react-markdown's defaultUrlTransform (safeProtocol
+// = http(s)/mailto/xmpp/irc) AND is something we want to hand to the OS, so
+// it is the only external protocol we route. tel:/sms:/ftp:/ftps: were dead
+// (blanked before they ever reach here) — removed (cr-security #23).
+const PROTOCOL_PREFIXES = ['mailto:'];
 
 /**
  * Classify a raw href into one of the five link kinds. `docPath` is the
@@ -195,12 +202,11 @@ export async function handleLinkClick(
       ctx.openDocument(classified.absolutePath);
       return;
     case 'local-other':
-      try {
-        await shellOpen(classified.absolutePath);
-      } catch (err) {
-        logger.warn('failed to open local file:', classified.absolutePath, err);
-        ctx.onError('无法打开文件');
-      }
+      // Security (cr-security #2): never pass an arbitrary, document-supplied
+      // local path to shell.open — a hostile .md could link to an
+      // .exe/.hta/.bat and launch it on a single click. Local non-markdown
+      // files are not openable from inside the reader.
+      ctx.onError('暂不支持打开此类本地文件');
       return;
   }
 }

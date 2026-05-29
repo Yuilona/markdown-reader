@@ -32,6 +32,11 @@
       }
     }
   },
+  "plugins": {
+    "shell": {
+      "open": "^(https?://|mailto:).+"
+    }
+  },
   "bundle": {
     "active": true,
     "targets": ["nsis", "msi"],

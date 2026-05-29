@@ -58,14 +58,14 @@ shell.open 的真实校验边界显式化。采纳决策 **D1：保持本地非 
 
 ## Acceptance Criteria
 
-- [ ] 构造性验证：恶意 .md 内 `[open](evil.hta)`、相对路径 `bin/x.exe`、`![i](x.scr)` 单击/查看
-      **均不调用 `shellOpen`**（代码路径上 `local-other`/图片 open 已无 shellOpen）
-- [ ] 图片右键不再出现总是报错的「在系统中打开」；本地非 .md 链接点击给出准确反馈
-- [ ] `tauri.conf.json` 含显式 `plugins.shell.open` 收窄正则；`http(s)`/`mailto` 链接仍正常打开
-- [ ] `capabilities/default.json` 注释更正（allow 不校验 open）
-- [ ] `PROTOCOL_PREFIXES` 不再含 `sms/ftp/ftps`
-- [ ] `pnpm exec tsc --noEmit` + `pnpm test` 通过；动到 Rust/config 后 `cargo check` 通过
-- [ ] README / 文档中若提到「本地文件用系统程序打开」的能力，同步更正
+- [x] 构造性验证：恶意 .md 的 `[open](evil.hta)`、相对 `bin/x.exe`、`![i](x.scr)` —— `local-other` 左键 + 图片右键「在系统中打开」均**移除了 shellOpen**；`grep shellOpen src/` 仅剩 2 处，且都只可能收到 http(s)/mailto
+- [x] 图片右键移除「在系统中打开」（连带删 `openImageInSystem` + 仅供它用的 `localPathFromAssetUrl` + 已死的 `isLocalAssetUrl`）；本地非 .md 链接左键提示「暂不支持打开此类本地文件」
+- [x] **额外加固**（审计未点名的侧门）：链接右键「在浏览器中打开」(`openLinkInBrowser`) 加协议守卫，非 http(s)/mailto 不再递给 shellOpen
+- [x] `tauri.conf.json` 加显式 `plugins.shell.open` = `^(https?://|mailto:).+`；http(s)/mailto 仍正常打开（`cargo check` 通过，build.rs 校验 config/capability schema）
+- [x] `capabilities/default.json`：`shell:allow-open` 收窄为 https/http/mailto（移除 `{path:"**"}` 与 `tel`），`description` 更正（allow 不校验 open，真正校验在 `plugins.shell.open`）
+- [x] `PROTOCOL_PREFIXES` 收为 `['mailto:']`（移除 `tel/sms/ftp/ftps` 死前缀）
+- [x] `pnpm exec tsc --noEmit`(0) + `pnpm test`(44/44) + `pnpm build`(ok) + `cargo check`(0) 全通过
+- [x] README「链接路由」一行更正（不再宣称「其他本地文件 → 系统默认应用」）
 
 ## Out of Scope
 

@@ -19,37 +19,6 @@ import type { ToastContextValue } from '../Toast/ToastProvider';
  * helpers (hooks may only be called from React function components).
  */
 
-/**
- * Detect whether the image src is a local file (Tauri's asset URL).
- * convertFileSrc rewrites local paths to `https://asset.localhost/...`
- * on Windows. Anything else (https://other, blob:, data:) is treated
- * as remote / inline.
- */
-export function isLocalAssetUrl(url: string): boolean {
-  return url.startsWith('https://asset.localhost/') || url.startsWith('asset://');
-}
-
-/**
- * Extract the original local filesystem path from a Tauri asset URL.
- * Returns null if the URL isn't a local asset.
- */
-export function localPathFromAssetUrl(url: string): string | null {
-  // `https://asset.localhost/<encoded path>` or `asset://localhost/<path>`
-  const match =
-    url.match(/^https:\/\/asset\.localhost\/(.+)$/) ??
-    url.match(/^asset:\/\/localhost\/(.+)$/);
-  if (!match) return null;
-  try {
-    const decoded = decodeURIComponent(match[1]);
-    // Tauri encodes Windows paths as `C:/foo/bar.png`; normalize to
-    // backslash form so the OS APIs (shell.open / fs.writeFile) accept
-    // it.
-    return decoded.replace(/\//g, '\\');
-  } catch {
-    return null;
-  }
-}
-
 /** Copy plain text to the clipboard. */
 async function writeClipboardText(text: string): Promise<void> {
   // `navigator.clipboard.writeText` works inside Tauri WebView2 without
@@ -88,11 +57,23 @@ export async function openLinkInBrowser(
   href: string,
   toast: ToastContextValue,
 ): Promise<void> {
+  // Security (cr-security #2): only hand http(s)/mailto links to shell.open.
+  // A doc-supplied local path (e.g. ./x.exe) must never reach shell.open from
+  // here either; "open in browser" is meaningless for a local file.
+  const trimmed = href.trim();
+  const isWebLink =
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.toLowerCase().startsWith('mailto:');
+  if (!isWebLink) {
+    toast.show('仅支持在浏览器中打开网页链接', { variant: 'info' });
+    return;
+  }
   try {
-    await shellOpen(href);
+    await shellOpen(trimmed);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
-    logger.warn('Open in browser failed:', href, err);
+    logger.warn('Open in browser failed:', trimmed, err);
     toast.show('无法打开链接', { variant: 'error', details: detail });
   }
 }
@@ -164,32 +145,6 @@ export async function saveImageToDisk(
     const detail = err instanceof Error ? err.message : String(err);
     logger.warn('Save image to disk failed:', resolvedSrc, err);
     toast.show('保存图片失败', { variant: 'error', details: detail });
-  }
-}
-
-/**
- * Open the image in the system's default viewer. R6.7 "Open in system
- * viewer". Only works for local images — remote URLs are not opened
- * (we'd have to download them first, which the user can do via "Save
- * as..." then open manually).
- */
-export async function openImageInSystem(
-  resolvedSrc: string,
-  toast: ToastContextValue,
-): Promise<void> {
-  const localPath = localPathFromAssetUrl(resolvedSrc);
-  if (!localPath) {
-    toast.show('远程图片无法用系统默认应用打开', {
-      variant: 'info',
-    });
-    return;
-  }
-  try {
-    await shellOpen(localPath);
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    logger.warn('Open image in system failed:', localPath, err);
-    toast.show('无法打开图片', { variant: 'error', details: detail });
   }
 }
 
