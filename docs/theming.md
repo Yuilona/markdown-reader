@@ -217,6 +217,7 @@ WebView2 是 Chromium 内核，用 `::-webkit-scrollbar` 即可（会同时作�
 - **Mermaid 图**是渲染后的 SVG，无法做「语法高亮」；其容器可调色（`--bg-mermaid-container`）。
 - 预览代码 **token 配色**由 Shiki 控制，`user.css` 改不动（§4.1）。
 - 打印走强制亮色 + 隐藏 chrome 的 `@media print`，主题在打印时大部分被覆盖。
+- 默认（无 `user.css`）样式声明了 `Sarasa UI SC` 作 CJK 正文，但该字体文件目前是 0 字节占位、未真正打包，故无主题时 CJK 会走系统字体回退；开箱的 Claude 默认主题用内置 `Noto Serif SC`，不受影响。
 
 ---
 
