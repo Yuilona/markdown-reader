@@ -81,15 +81,17 @@
 
 ## Acceptance Criteria
 
-- [ ] R1：构造 temp+rename 保存场景，外部修改的自动重载不再漏触发；`cargo check` 通过
-- [ ] R2：`stop_watching` 后不再有针对已停路径的陈旧 `file-changed`；worker 可被取消；注释更正
-- [ ] R3：点击预览中光标已在的同一行后，下一次跨行移动的高亮/滚动不再被吞
-- [ ] R4：模态打开期间外部多次写入只弹一次冲突框（或替换而非叠加）
-- [ ] R5：死 `Ctrl+G` 分支已移除；编辑器内/阅读模式查找下一处行为不变
-- [ ] R6：`current_exe()` 失败路径不再 panic（优雅降级/上抛）；`cargo check` 通过
-- [ ] R7：模拟 `run()` 失败时有原生提示而非静默退出
-- [ ] R8（若做）三处 mutex 中毒策略一致
-- [ ] `pnpm exec tsc --noEmit` + `pnpm test` 通过；Rust 改动 `cargo check` 通过；无功能回归
+- [x] R1：`paths_equal_loose`/canonicalize 比较换成**父目录内 basename 大小写比较**（精确且免疫 `\\?\`/短名），原子重命名窗口不再漏匹配；`cargo check`+`cargo build` 通过
+- [x] R2：`ActiveWatcher` 加 `Arc<AtomicBool> cancel`，worker emit 前检查、`stop_watching`/swap 置位 → 在途 worker 变 no-op，不再发陈旧 `file-changed`；`:216` 注释更正
+- [x] R3：`handlePreviewClick` 仅当 `targetLine !== cursor?.line` 才置 suppress 标志 → 点同一行不再让标志卡死、吞掉下次跨行的滚动/高亮
+- [x] R4：`useFileWatcher` 加 `conflictInFlightRef`，冲突弹窗打开期间忽略后续事件（`.finally` 复位）→ 不再叠加 N 个相同弹窗
+- [x] R5：删除 `useShortcuts.ts` 死 `Ctrl+G` 半截分支；改注释说明 Ctrl+G/F3 故意不拦（CM6/SearchBar 自处理）
+- [x] R6：`data_dir()` 改 `current_exe().ok()...unwrap_or_else(temp_dir)` 优雅降级，不再 panic；`cargo build` 通过
+- [x] R7：`run()` 末尾 `match` 取代 `.expect()`；失败时 `#[cfg(windows)]` **MessageBoxW**（`#[link(name="user32")]`，无新 crate）弹原因 + 退出；`cargo build` 确认 user32 链接解析
+- [x] R8：`take_cli_launch_path` 与 watcher 的 state 锁统一为 `into_inner()` 中毒恢复
+- [x] `pnpm exec tsc --noEmit`(0) + `pnpm test`(44/44) + `pnpm build`(ok) + `cargo check`(0) + `cargo build`(0) 全通过；无功能回归
+
+> 验证说明：以上经**编译/链接/类型/单测/构建**与代码推理确认。R1/R2/R7 的运行期行为（实际外部改写重载、停表后无陈旧事件、缺 WebView2 弹窗）在本环境无法实跑；建议封板前在 app 内做一次目检：外部编辑器改写当前文件→自动重载；编辑态有未保存改动时外部改写→只弹一次冲突框；预览点击行高亮联动。
 
 ## Out of Scope
 

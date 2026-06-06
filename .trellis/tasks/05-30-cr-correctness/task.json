@@ -3,7 +3,7 @@
   "name": "cr-correctness",
   "title": "CR-Correctness: watcher paths / Rust panics / editor sync bugs",
   "description": "Fix watcher path-match \\?\\ prefix, worker-thread lifecycle, data_dir/run panics, editor sync + shortcut edge cases (#6/#7/#8/#9/#10/#11/#20/#21/#22/#27).",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

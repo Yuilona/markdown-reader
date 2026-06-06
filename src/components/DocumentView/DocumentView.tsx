@@ -232,12 +232,19 @@ export function DocumentView({
       if (!block) return;
       const bodyLine = Number(block.getAttribute('data-source-line'));
       if (!Number.isFinite(bodyLine)) return;
-      // Suppress the editor→preview scroll that the resulting cursor move
-      // would otherwise trigger (don't scroll the block the user clicked).
-      suppressPreviewScrollRef.current = true;
-      jumpToEditorLine(bodyLine + lineOffset);
+      const targetLine = bodyLine + lineOffset;
+      // R3 (#7): only raise the echo-suppression flag when the jump will
+      // actually move the cursor to a DIFFERENT line. If the clicked block
+      // maps to the line the cursor is already on, jumpToEditorLine produces
+      // no cursorLine change, the editor→preview sync effect never re-fires,
+      // and the flag would otherwise stay stuck `true` and swallow the next
+      // genuine line move's scroll + flash.
+      if (targetLine !== (cursor?.line ?? null)) {
+        suppressPreviewScrollRef.current = true;
+      }
+      jumpToEditorLine(targetLine);
     },
-    [editTextProvided, jumpToEditorLine, lineOffset],
+    [editTextProvided, jumpToEditorLine, lineOffset, cursor?.line],
   );
 
   // Pull the lightbox opener + link router context once at the component

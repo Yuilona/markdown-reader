@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 
 import { loadDocument, startWatching, stopWatching, type LoadedDocument } from '../lib/tauri';
@@ -68,6 +68,9 @@ export function useFileWatcher(options: UseFileWatcherOptions): void {
   const toast = useToast();
   const { mode, dirty, bufferText } = useEditMode();
   const confirm = useConfirm();
+  // R4 (#8): true while a conflict dialog is open for the current path, so
+  // repeated external writes during the modal don't stack duplicate prompts.
+  const conflictInFlightRef = useRef(false);
 
   // Start/stop watcher on path change.
   useEffect(() => {
@@ -162,6 +165,13 @@ export function useFileWatcher(options: UseFileWatcherOptions): void {
       // NOT call onReload here — onReload swaps doc.text which
       // EditModeProvider's reset effect would happily overwrite the
       // user's buffer.
+      //
+      // R4 (#8): dedupe stacked prompts. Each file-changed event spawns its
+      // own async handler; without this guard an external program writing
+      // repeatedly while the modal is open would enqueue one dialog per write
+      // (useConfirm is a FIFO queue) and force the user to answer N times.
+      if (conflictInFlightRef.current) return;
+      conflictInFlightRef.current = true;
       const choice = await confirm({
         title: '外部修改冲突',
         message: '当前文件已被其他程序修改。是否重载（这将丢弃你当前的编辑）？',
@@ -170,6 +180,8 @@ export function useFileWatcher(options: UseFileWatcherOptions): void {
           { value: 'reload', label: '重载（丢弃修改）', variant: 'danger' },
         ],
         cancelValue: 'keep',
+      }).finally(() => {
+        conflictInFlightRef.current = false;
       });
       if (cancelled) return;
       if (choice === 'reload') {

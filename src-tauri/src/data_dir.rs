@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Resolve the portable data directory: `<install_dir>/data/`.
 ///
@@ -7,14 +7,15 @@ use std::path::PathBuf;
 /// so that uninstalling the install dir cleanly removes everything and the
 /// user can put the app on any drive.
 ///
-/// Creates the directory on first call if it does not exist.
+/// Degrades gracefully (R6 / #20 / #21): if `current_exe()` is unavailable
+/// (rare), fall back to a temp-dir subfolder instead of panicking. Creates the
+/// directory on first call if it does not exist.
 pub fn data_dir() -> PathBuf {
-    let exe_path = std::env::current_exe().expect("failed to read current_exe path");
-    let exe_dir = exe_path
-        .parent()
-        .expect("current_exe path has no parent directory")
-        .to_path_buf();
-    let data = exe_dir.join("data");
+    let data = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf))
+        .map(|dir| dir.join("data"))
+        .unwrap_or_else(|| std::env::temp_dir().join("markdown-reader-data"));
 
     if let Err(err) = std::fs::create_dir_all(&data) {
         eprintln!(

@@ -202,11 +202,10 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
         if (onOpenSearch) onOpenSearch();
         return;
       }
-      // Ctrl+G / F3 — find-next inside CM6. Same yield rule: when focus
-      // is in CM6, let it handle the event natively.
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'g') {
-        if (isInCodeMirror(e.target)) return;
-      }
+      // Ctrl+G / F3 (find-next) are intentionally NOT handled here: inside
+      // CM6 its own searchKeymap handles them natively, and the read-mode
+      // SearchBar binds F3/Enter itself. We neither intercept nor
+      // preventDefault them (R5 / #9: removed a dead no-op Ctrl+G branch).
       // Ctrl+\ toggles TOC (R13, PR-7). The key string for backslash is
       // literally '\' on every keyboard layout that has one — Windows
       // delivers it as such regardless of locale.

@@ -1,4 +1,5 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -14,22 +15,26 @@ use tauri::{AppHandle, Emitter};
 /// starting a new one.
 ///
 /// `notify` requires the watcher value to stay alive — drop it and the
-/// background thread shuts down. We park it inside an `Arc<Mutex<...>>`
-/// rather than a `Mutex<Option<...>>` directly so the swap path can clone
-/// the Arc into the worker thread for the debounced-event timer without
-/// fighting the borrow checker.
+/// background thread shuts down. We park it inside a `Mutex<Option<...>>`.
 pub struct WatcherState {
     inner: Mutex<Option<ActiveWatcher>>,
 }
 
 struct ActiveWatcher {
-    /// Path of the file we are notifying on (normalized via `canonicalize`).
-    /// Kept around for diagnostics — never read directly because the
-    /// handler closure already captures the canonical target.
+    /// Path of the file we are notifying on (as received from the frontend).
+    /// Kept for diagnostics — never read directly because the handler closure
+    /// already captures the target basename it matches against.
     #[allow(dead_code)]
     target: PathBuf,
-    /// Held only to keep the background thread alive. Dropping it stops
-    /// watching.
+    /// Cancellation token for the debounce worker thread (R2 / #10). The
+    /// notify handler spawns a detached worker that sleeps out the debounce
+    /// window. Dropping `_watcher` stops the notify OS thread but CANNOT stop
+    /// an already-sleeping worker; setting `cancel` makes that worker's final
+    /// wake a no-op (it returns without emitting), so a stop/swap can't emit a
+    /// stale `file-changed` for a path we no longer watch.
+    cancel: Arc<AtomicBool>,
+    /// Held only to keep the notify background thread alive. Dropping it stops
+    /// watching at the OS level.
     _watcher: RecommendedWatcher,
 }
 
@@ -62,6 +67,12 @@ const DEBOUNCE_MS: u64 = 200;
 ///     looks like "the watched file went away" to `notify`. We watch the
 ///     PARENT directory (non-recursive) and filter events to our target
 ///     basename, which works for all save patterns we care about.
+///   * Because the watch is scoped to the single parent directory,
+///     case-insensitive **basename** equality is an exact match for our
+///     target (no two files in one dir share a name) and is immune to the
+///     `\\?\` verbatim prefix / 8.3 short-name / drive-letter-case skew that a
+///     canonicalized full-path compare suffers during the atomic-rename
+///     window (R1 / #6 / #11).
 ///   * Events are debounced 200ms with a shared `Instant`. Each incoming
 ///     event bumps the deadline; a single worker thread sleeps until the
 ///     deadline expires, then emits ONE `file-changed` event to the
@@ -81,26 +92,30 @@ pub fn start_watching(
         .ok_or_else(|| format!("no parent dir for {}", path))?
         .to_path_buf();
 
-    // Canonicalize ONLY for the event-comparison side. Some editors emit
-    // events with the symlink-resolved form; canonicalize the incoming
-    // event paths and our target so they match even when one carries a
-    // `\\?\` prefix or differs in drive-letter case.
-    //
-    // CRITICAL: we keep the ORIGINAL `path` (as received from the
-    // frontend) for the emit payload. The frontend uses backslash-form
-    // case-insensitive equality (`pathsEqual`) to match `file-changed`
-    // payloads against its currentPath — if we emit the canonicalized
-    // form (which on Windows includes a `\\?\` prefix), the equality
-    // check silently drops every event and watcher auto-reload appears
-    // broken.
-    let target_canonical = std::fs::canonicalize(&target_path)
-        .unwrap_or_else(|_| target_path.clone());
+    // Match incoming events by case-insensitive basename within the watched
+    // parent dir (see the strategy note above for why this is exact + robust).
+    let target_name = target_path
+        .file_name()
+        .ok_or_else(|| format!("no file name for {}", path))?
+        .to_string_lossy()
+        .to_lowercase();
+
+    // CRITICAL: we keep the ORIGINAL `path` (as received from the frontend)
+    // for the emit payload. The frontend uses backslash-form case-insensitive
+    // equality (`pathsEqual`) to match `file-changed` payloads against its
+    // currentPath — emitting a canonicalized form (which on Windows includes a
+    // `\\?\` prefix) would make the equality check silently drop every event
+    // and watcher auto-reload would appear broken.
     let emit_payload = path.clone();
 
     let app_handle = app.clone();
     let deadline: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
     let deadline_for_handler = Arc::clone(&deadline);
-    let target_for_handler = target_canonical.clone();
+
+    // Cancellation token: lets stop_watching / swap neutralize an in-flight
+    // debounce worker so it can't emit for an unwatched path (R2 / #10).
+    let cancel = Arc::new(AtomicBool::new(false));
+    let cancel_for_handler = Arc::clone(&cancel);
 
     let mut watcher = recommended_watcher(move |res: notify::Result<notify::Event>| {
         let event = match res {
@@ -123,18 +138,14 @@ pub fn start_watching(
             return;
         }
 
-        // Filter to our specific target. Compare canonicalized forms so an
-        // event for `c:\foo\bar.md` matches a target stored as
-        // `C:\foo\bar.md` (Windows case-insensitive). `canonicalize`
-        // requires the file to exist; during an atomic-rename window the
-        // target may briefly not exist, so we fall back to a case-
-        // insensitive Path-string compare.
+        // Filter to our specific target by case-insensitive basename. The
+        // watch is non-recursive on the parent dir, so any event whose file
+        // name equals the target's file name IS our file — robust across the
+        // atomic-rename window where a full-path canonicalize would fail.
         let matches_target = event.paths.iter().any(|p| {
-            if let Ok(p_canon) = std::fs::canonicalize(p) {
-                p_canon == target_for_handler
-            } else {
-                paths_equal_loose(p, &target_for_handler)
-            }
+            p.file_name()
+                .map(|n| n.to_string_lossy().to_lowercase() == target_name)
+                .unwrap_or(false)
         });
         if !matches_target {
             return;
@@ -157,8 +168,13 @@ pub fn start_watching(
             let deadline_for_worker = Arc::clone(&deadline_for_handler);
             let app_for_worker = app_handle.clone();
             let payload_for_worker = emit_payload.clone();
+            let cancel_for_worker = Arc::clone(&cancel_for_handler);
             thread::spawn(move || {
                 loop {
+                    // Bail immediately if this watcher was stopped/replaced.
+                    if cancel_for_worker.load(Ordering::SeqCst) {
+                        return;
+                    }
                     // Snapshot the current deadline.
                     let now = Instant::now();
                     let until = {
@@ -183,6 +199,12 @@ pub fn start_watching(
                         };
                         *g = None;
                     }
+                    // R2 (#10): if the watcher was stopped/replaced while we
+                    // slept, do NOT emit — that would be a stale event for a
+                    // path we no longer watch.
+                    if cancel_for_worker.load(Ordering::SeqCst) {
+                        return;
+                    }
                     // Emit the ORIGINAL path string the frontend gave us
                     // — see the comment above `emit_payload`.
                     if let Err(err) = app_for_worker.emit("file-changed", &payload_for_worker) {
@@ -201,10 +223,14 @@ pub fn start_watching(
         .watch(parent.as_path(), RecursiveMode::NonRecursive)
         .map_err(|e| format!("failed to watch {}: {e}", parent.display()))?;
 
-    // Swap into state, dropping any previous watcher.
-    let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
+    // Swap into state, cancelling + dropping any previous watcher first.
+    let mut guard = state.inner.lock().unwrap_or_else(|p| p.into_inner());
+    if let Some(old) = guard.as_ref() {
+        old.cancel.store(true, Ordering::SeqCst);
+    }
     *guard = Some(ActiveWatcher {
-        target: target_canonical,
+        target: target_path,
+        cancel,
         _watcher: watcher,
     });
     Ok(())
@@ -212,15 +238,12 @@ pub fn start_watching(
 
 /// Stop the active watcher (if any). Idempotent.
 pub fn stop_watching(state: &WatcherState) -> Result<(), String> {
-    let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
-    *guard = None; // drops ActiveWatcher → drops _watcher → thread exits
+    let mut guard = state.inner.lock().unwrap_or_else(|p| p.into_inner());
+    if let Some(active) = guard.as_ref() {
+        // Neutralize any in-flight debounce worker so it can't emit a stale
+        // `file-changed` after we stop (R2 / #10).
+        active.cancel.store(true, Ordering::SeqCst);
+    }
+    *guard = None; // drops ActiveWatcher → drops _watcher → notify OS thread exits
     Ok(())
-}
-
-/// Case-insensitive path equality fallback used when `canonicalize` fails
-/// (e.g., the file briefly doesn't exist during an atomic rename).
-fn paths_equal_loose(a: &Path, b: &Path) -> bool {
-    let a_str = a.to_string_lossy().to_lowercase().replace('/', "\\");
-    let b_str = b.to_string_lossy().to_lowercase().replace('/', "\\");
-    a_str == b_str
 }

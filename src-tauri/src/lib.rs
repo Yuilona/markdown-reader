@@ -23,7 +23,10 @@ struct CliLaunchState(Mutex<Option<String>>);
 
 #[tauri::command]
 fn take_cli_launch_path(state: State<'_, CliLaunchState>) -> Option<String> {
-    state.0.lock().ok().and_then(|mut g| g.take())
+    // R8 (#27): recover from a poisoned lock via into_inner() (consistent with
+    // the file watcher) so a one-time panic can't permanently break CLI launch.
+    let mut guard = state.0.lock().unwrap_or_else(|p| p.into_inner());
+    guard.take()
 }
 
 /// Start watching a file for external modifications. Replaces any
@@ -81,7 +84,7 @@ pub fn run() {
     let cli_path: Option<String> = first_markdown_arg(std::env::args())
         .map(|p| p.to_string_lossy().to_string());
 
-    tauri::Builder::default()
+    let result = tauri::Builder::default()
         .manage(CliLaunchState(Mutex::new(cli_path)))
         .manage(WatcherState::new())
         // Single-instance plugin: when a second copy is launched, forward its
@@ -112,6 +115,62 @@ pub fn run() {
             start_watching,
             stop_watching,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .run(tauri::generate_context!());
+
+    if let Err(err) = result {
+        // R7 (#22): release builds detach the console (windows_subsystem=
+        // "windows"), so a panic here would make the process vanish silently —
+        // most commonly when the WebView2 runtime is missing on the target
+        // machine. Surface the cause in a native dialog instead of vanishing.
+        report_fatal_startup_error(&err.to_string());
+        std::process::exit(1);
+    }
+}
+
+/// R7 (#22): show a native error dialog on a fatal startup failure. Release
+/// builds set `windows_subsystem = "windows"` (no console), so without this a
+/// `run()` error — e.g. a missing WebView2 runtime — would make the process
+/// vanish with no diagnostic. Windows-only native MessageBoxW (no extra
+/// crate); other targets just log to stderr.
+#[cfg(windows)]
+fn report_fatal_startup_error(message: &str) {
+    use std::ffi::{c_void, OsStr};
+    use std::os::windows::ffi::OsStrExt;
+
+    fn wide(s: &str) -> Vec<u16> {
+        OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
+    }
+
+    // MB_OK | MB_ICONERROR
+    const MB_ICONERROR: u32 = 0x0000_0010;
+    #[link(name = "user32")]
+    extern "system" {
+        fn MessageBoxW(
+            hwnd: *mut c_void,
+            text: *const u16,
+            caption: *const u16,
+            u_type: u32,
+        ) -> i32;
+    }
+
+    let text = wide(&format!(
+        "Markdown Reader 启动失败：\n{message}\n\n请确认系统已安装 WebView2 运行时。"
+    ));
+    let caption = wide("Markdown Reader");
+    // SAFETY: valid NUL-terminated UTF-16 buffers that outlive the call, a null
+    // owner hwnd, and a known message-box flag — a standard user32 call.
+    unsafe {
+        MessageBoxW(
+            std::ptr::null_mut(),
+            text.as_ptr(),
+            caption.as_ptr(),
+            MB_ICONERROR,
+        );
+    }
+    eprintln!("[startup] fatal: {message}");
+}
+
+#[cfg(not(windows))]
+fn report_fatal_startup_error(message: &str) {
+    eprintln!("[startup] fatal: {message}");
 }
