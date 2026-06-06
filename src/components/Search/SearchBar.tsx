@@ -136,10 +136,13 @@ export function SearchBar({
 
   if (!open) return null;
 
+  // cr-performance #16: when the match list was capped at MAX_MATCHES the
+  // total is a lower bound — show "N+" so the user knows there are more.
+  const totalText = search.truncated ? `${search.total}+` : `${search.total}`;
   const counterText =
     search.total === 0 && search.query !== ''
       ? '0 / 0'
-      : `${search.currentIndex + 1} / ${search.total}`;
+      : `${search.currentIndex + 1} / ${totalText}`;
   const counterClass = search.isInvalid || (search.query !== '' && search.total === 0)
     ? `${styles.counter} ${styles.counterEmpty}`
     : styles.counter;

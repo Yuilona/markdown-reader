@@ -34,8 +34,31 @@ export interface FindMatchesOptions {
   skipSelectors: string[];
 }
 
+/** Hard upper bound on collected matches (cr-performance #16). A wide
+ *  query in a large doc (e.g. a single common CJK character) used to
+ *  collect tens of thousands of matches and then materialize a `<mark>`
+ *  for each — multi-second freezes. We stop the walk once this many
+ *  matches are found and signal truncation so the UI can show "N+". */
+export const MAX_MATCHES = 2000;
+
+/** Coarse wall-clock budget for the walk (cr-performance #13). Regex mode
+ *  compiles raw user input, so a catastrophic-backtracking pattern like
+ *  `(a+)+$` can wedge the single thread. JS regex can't be interrupted
+ *  mid-`exec`, so this only bounds the BETWEEN-exec walk — a lightweight
+ *  guard, NOT full ReDoS protection (Web Worker is out of scope). */
+const WALK_BUDGET_MS = 250;
+
+export interface FindMatchesResult {
+  /** Matches found (capped at MAX_MATCHES). */
+  matches: Match[];
+  /** True when the walk hit MAX_MATCHES (or the time budget) and stopped
+   *  early — there are more matches than `matches.length`. */
+  truncated: boolean;
+}
+
 /**
- * Walk all text nodes under `root` and return every match of `pattern`.
+ * Walk all text nodes under `root` and return every match of `pattern`,
+ * capped at MAX_MATCHES (cr-performance #16).
  *
  * Skipping is enforced at the TreeWalker filter level: when a candidate
  * text node's ancestor chain hits a `skipSelectors` element, the walker
@@ -51,9 +74,13 @@ export function findMatches(
   root: HTMLElement,
   pattern: RegExp,
   opts: FindMatchesOptions,
-): Match[] {
+): FindMatchesResult {
   const matches: Match[] = [];
+  let truncated = false;
   const skipSelectors = opts.skipSelectors;
+  // cr-performance #13: bound the walk's wall-clock so a pathological
+  // regex can't freeze the thread indefinitely between exec calls.
+  const startedAt = Date.now();
 
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
@@ -87,11 +114,11 @@ export function findMatches(
   if (!pattern.global) {
     // eslint-disable-next-line no-console
     console.warn('[markdown-reader] findMatches: pattern must be global');
-    return [];
+    return { matches, truncated };
   }
 
   let current: Node | null;
-  while ((current = walker.nextNode())) {
+  outer: while ((current = walker.nextNode())) {
     const textNode = current as Text;
     const text = textNode.nodeValue ?? '';
     pattern.lastIndex = 0;
@@ -106,10 +133,23 @@ export function findMatches(
         continue;
       }
       matches.push({ node: textNode, start: m.index, end: m.index + matchText.length });
+      // cr-performance #16: cap collection — stop once we hit the ceiling.
+      if (matches.length >= MAX_MATCHES) {
+        truncated = true;
+        break outer;
+      }
+    }
+    // cr-performance #13: abort the walk if we've blown the time budget
+    // (checked per text node, not per match, to keep the hot path cheap).
+    // A pathological regex degrades to "search too complex" rather than a
+    // hard freeze.
+    if (Date.now() - startedAt > WALK_BUDGET_MS) {
+      truncated = true;
+      break;
     }
   }
 
-  return matches;
+  return { matches, truncated };
 }
 
 /**
@@ -217,6 +257,13 @@ export function clearHighlights(root: HTMLElement): void {
   }
 }
 
+/** Max allowed length of a raw REGEX-mode pattern (cr-performance #13).
+ *  Catastrophic-backtracking patterns are usually long; rejecting absurd
+ *  lengths is a cheap first line of defence (the walk-time budget in
+ *  `findMatches` covers the rest). Literal (non-regex) queries are never
+ *  length-capped — they can't backtrack. */
+const MAX_REGEX_PATTERN_LENGTH = 1000;
+
 /**
  * Construct a RegExp from raw user input + toggle flags. Returns `null`
  * on an invalid regex (the SearchBar shows "0 / 0" in red in that case).
@@ -234,6 +281,10 @@ export function buildPattern(
   flags: { caseSensitive: boolean; wholeWord: boolean; regex: boolean },
 ): RegExp | null {
   if (input === '') return null;
+  // cr-performance #13: in regex mode, reject implausibly long patterns
+  // (handled exactly like an invalid regex → red "0 / 0"). Lightweight
+  // ReDoS guard; full protection (Web Worker + timeout) is out of scope.
+  if (flags.regex && input.length > MAX_REGEX_PATTERN_LENGTH) return null;
   let source = input;
   if (!flags.regex) {
     source = escapeRegex(source);

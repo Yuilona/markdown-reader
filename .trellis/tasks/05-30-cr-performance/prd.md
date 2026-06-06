@@ -69,13 +69,17 @@
 
 ## Acceptance Criteria
 
-> 本轮范围 = **高影响子集 PR-1（R1 + R3 + R4，用户选定）**。R2/R5/R6/R7/R8 留待下一轮，故任务**未归档**、保持 `in_progress`。
+> 分两轮落地：PR-1 = R1+R3+R4；PR-2/3/4 = R5+R6+R8 + R2(logger,approach B) + R7。**R1–R8 全部完成。**
 
-- [x] R1：`rehypeShikiFromHighlighter` 传入 LRU `cache`（键 `${lang}:${meta}:${code}`）→ 未改动的代码块不重分词；大文档 >2M 字符走无 Shiki 链，不再全文同步分词
-- [x] R3：`DocumentView` 加 `LARGE_DOC_CHARS=2_000_000` 阈值，超阈值用 `rehypePluginsNoHighlightWithMermaid`（省略 Shiki，代码 plain `<pre>`；source-line/mermaid/katex/标题 不变）；可见提示作为可选项推迟
-- [x] R4：`mermaidCache` 换 `LruMap(64)`（get 命中移尾、set 超限淘汰最旧），修无界内存增长；`clearCacheForTheme` 行为不变
-- [x] PR-1 验证：`pnpm exec tsc --noEmit`(0) + `pnpm test`(50/50，含新增 `lruMap.test.ts` 6 例) + `pnpm build`(ok)；纯前端无 Rust 改动；无功能回归
-- [ ] R2（下轮，按「JS 写队列+内存计数」） / R5 / R6 / R7 / R8 —— 本轮未做
+- [x] R1：`rehypeShikiFromHighlighter` 传入 LRU `cache`（键 `${lang}:${meta}:${code}`）→ 未改动的代码块不重分词；大文档 >2M 字符走无 Shiki 链
+- [x] R3：`DocumentView` 加 `LARGE_DOC_CHARS=2_000_000` 阈值，超阈值用 `rehypePluginsNoHighlightWithMermaid`（省略 Shiki；source-line/mermaid/katex/标题 不变）
+- [x] R4：`mermaidCache` 换 `LruMap(64)`，修无界内存增长；`clearCacheForTheme` 不变
+- [x] R5：`domSearch.findMatches` 加 `MAX_MATCHES=2000` 上限 + `truncated` 标志，`SearchBar` 显示「N+」
+- [x] R6：`useEditorScrollSync` 按 memo 化 `versionKey`（`[doc.path, body]`）缓存排序 `(line,el)[]` + 二分，替代每次 querySelectorAll+线扫；ANCHOR/插值/suppress/scrollSync 行为不变
+- [x] R7：`buildPattern` 拒绝 >1000 字符的正则模式；`findMatches` 加 `WALK_BUDGET_MS=250` 墙钟预算中止（轻量守卫，非完全防护）
+- [x] R8：`scrollPositions` 内存化 `cachedPositions` + `flushScroll`（乐观清 dirty/失败重标）；`useScrollMemory` 250ms 内存存 + 1.5s 盘写 + 换档/卸载 flush；LRU 100 不变
+- [x] R2（approach B，无 Rust）：`logger` 内存字节计数（init 时 `stat` 播种）免去 `rollIfNeeded` 二次整读 + 单 `writeQueue` 串行化消除交错丢行；5MB 轮转 + 7 天清理不变
+- [x] 验证：`pnpm exec tsc --noEmit`(0) + `pnpm test`(**65/65**，+`domSearch`/`logger`/`scrollPositions` 共 15 例) + `pnpm build`(ok)；纯前端无 Rust 改动；无功能回归
 
 > 建议（可选）：用代码密集大文档 + 多 Mermaid 文档目检：编辑时不再每次全文卡顿、缓存命中可观测；浏览多图文档内存有界。
 

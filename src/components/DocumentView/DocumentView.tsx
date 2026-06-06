@@ -218,6 +218,15 @@ export function DocumentView({
   // preview the user just clicked. handlePreviewClick raises this; the sync
   // hook consumes it once and skips that scroll.
   const suppressPreviewScrollRef = useRef(false);
+  // cr-performance #15: version key for the scroll-sync hook's cached
+  // (line, element) lookup table — rebuilt only when the rendered body
+  // actually changes. `[doc.path, body]` covers both doc swaps AND
+  // watcher reloads (text changes → new body → new key). Mirrors the
+  // `tocVersionKey` used below for the TOC / SearchBar.
+  const syncVersionKey = useMemo(
+    () => `${doc.path} ${body}`,
+    [doc.path, body],
+  );
   useEditorScrollSync({
     editActive: editTextProvided,
     scrollSync: scrollSyncEnabled,
@@ -227,6 +236,7 @@ export function DocumentView({
     lineOffset,
     totalBodyLines,
     suppressRef: suppressPreviewScrollRef,
+    versionKey: syncVersionKey,
   });
 
   // Preview → editor (bidirectional line sync): clicking a rendered block

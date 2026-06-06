@@ -52,6 +52,19 @@ interface ScrollSyncOptions {
    *  NOT scroll/flash the preview back (consumed once). Mutable holder
    *  (we write `.current`), so not React's readonly `RefObject`. */
   suppressRef?: { current: boolean };
+  /** cr-performance #15: bumps whenever the rendered article body changes
+   *  (doc swap OR watcher reload). The hook rebuilds its sorted
+   *  (line, element) lookup table only when this changes, then binary-
+   *  searches it on each cursor move instead of re-running
+   *  `querySelectorAll` + a linear scan every time. */
+  versionKey?: string;
+}
+
+/** A `data-source-line` stamp paired with its element, sorted ascending by
+ *  line (cr-performance #15). */
+interface StampedBlock {
+  line: number;
+  el: HTMLElement;
 }
 
 /** Where the clicked block's TOP lands: this fraction down from the top of
@@ -68,9 +81,16 @@ export function useEditorScrollSync({
   lineOffset,
   totalBodyLines,
   suppressRef,
+  versionKey,
 }: ScrollSyncOptions): void {
   const timerRef = useRef<number | null>(null);
   const flashTimerRef = useRef<number | null>(null);
+  // cr-performance #15: cached sorted (line, element) table + the
+  // versionKey it was built for. While the key is unchanged we reuse the
+  // table and binary-search it; on a doc swap / watcher reload the key
+  // changes and we lazily rebuild on the next cursor move.
+  const blocksRef = useRef<StampedBlock[]>([]);
+  const blocksKeyRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (!editActive || cursorLine == null) return;
@@ -136,21 +156,56 @@ export function useEditorScrollSync({
         return;
       }
 
+      // cr-performance #15: (Re)build the sorted (line, element) lookup
+      // table only when the document version changed. Previously this ran
+      // `querySelectorAll('[data-source-line]')` + an O(n) scan on every
+      // cursor-line change (50ms debounce); the node count grows with
+      // li/tr/p/h*, so deep editing of a large doc paid that scan
+      // repeatedly. Now we scan once per render and binary-search after.
+      if (blocksKeyRef.current !== versionKey || blocksRef.current.length === 0) {
+        const nodes = article.querySelectorAll<HTMLElement>('[data-source-line]');
+        const blocks: StampedBlock[] = [];
+        for (const el of nodes) {
+          const ln = Number(el.getAttribute('data-source-line'));
+          if (!Number.isFinite(ln)) continue;
+          blocks.push({ line: ln, el });
+        }
+        // `querySelectorAll` returns document order, which is normally
+        // ascending by source line — but sort defensively so the binary
+        // search below is correct even if a plugin reorders blocks.
+        blocks.sort((a, b) => a.line - b.line);
+        blocksRef.current = blocks;
+        blocksKeyRef.current = versionKey;
+      }
+      const blocks = blocksRef.current;
+
       // Find the block whose stamped line is the largest ≤ bodyLine (the
       // block containing the cursor) AND the next block's start line (the
       // smallest stamp > bodyLine) to bound this block's source-line span.
-      const nodes = article.querySelectorAll<HTMLElement>('[data-source-line]');
-      let bestLine = -1;
-      let nextLine = Infinity;
-      let target: HTMLElement | null = null;
-      for (const el of nodes) {
-        const ln = Number(el.getAttribute('data-source-line'));
-        if (!Number.isFinite(ln)) continue;
-        if (ln <= bodyLine && ln > bestLine) {
-          bestLine = ln;
-          target = el;
+      // Binary search for the rightmost block with `line <= bodyLine`.
+      let lo = 0;
+      let hi = blocks.length - 1;
+      let bestIdx = -1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (blocks[mid].line <= bodyLine) {
+          bestIdx = mid;
+          lo = mid + 1;
+        } else {
+          hi = mid - 1;
         }
-        if (ln > bodyLine && ln < nextLine) nextLine = ln;
+      }
+      const target: HTMLElement | null = bestIdx >= 0 ? blocks[bestIdx].el : null;
+      const bestLine = bestIdx >= 0 ? blocks[bestIdx].line : -1;
+      // The next stamp (smallest line > bodyLine) bounds this block's span.
+      // With duplicate lines possible in theory, walk forward past any
+      // blocks sharing `bestLine` to the first strictly-greater stamp.
+      let nextLine = Infinity;
+      for (let i = bestIdx + 1; i < blocks.length; i++) {
+        if (blocks[i].line > bodyLine) {
+          nextLine = blocks[i].line;
+          break;
+        }
       }
       if (!target) {
         if (scrollSync) scroller.scrollTo({ top: 0 });
@@ -180,5 +235,5 @@ export function useEditorScrollSync({
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       timerRef.current = null;
     };
-  }, [editActive, scrollSync, cursorLine, lineOffset, totalBodyLines, scrollRef, articleRef, suppressRef]);
+  }, [editActive, scrollSync, cursorLine, lineOffset, totalBodyLines, scrollRef, articleRef, suppressRef, versionKey]);
 }

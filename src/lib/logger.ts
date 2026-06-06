@@ -5,6 +5,7 @@ import {
   readTextFile,
   remove,
   rename,
+  stat,
   writeTextFile,
 } from '@tauri-apps/plugin-fs';
 
@@ -24,9 +25,14 @@ import { getDataDir } from './tauri';
  *     caller that's already trying to recover from another problem.
  *   - Rolling: if the current log size after the append would exceed
  *     ~5 MB (MAX_LOG_BYTES), the existing `app.log` is renamed to
- *     `app.log.<isoTs>.bak` and a fresh file is started. We check size
- *     before each write — cheap enough at our log frequency (a handful
- *     of writes per session, mostly during error paths).
+ *     `app.log.<isoTs>.bak` and a fresh file is started. The current size
+ *     is tracked in a module-level byte counter (cr-performance #3),
+ *     seeded ONCE at init from a single `stat`, so the rotation check no
+ *     longer re-reads the whole file on every write.
+ *   - Serialized writes: every append chains onto a single promise
+ *     (`writeQueue`, mirroring `settingsStore.ts`) so concurrent
+ *     fire-and-forget calls can't interleave their read-modify-write and
+ *     lose lines (cr-performance #3).
  *   - Cleanup: on first call (init), any `.bak` files older than
  *     CLEANUP_AFTER_MS are removed. Runs once per app lifetime.
  *   - Console mirror: every public method also calls the matching
@@ -43,10 +49,18 @@ import { getDataDir } from './tauri';
  *   would add complexity and a flush-on-exit dance that Tauri's plugin
  *   model doesn't make ergonomic.
  *
+ * Append strategy (cr-performance #3, approach B — JS-only, no Rust):
+ *   The Tauri fs plugin's `writeTextFile` has no append mode, so we still
+ *   do a read-modify-write per line. But the WRITES ARE SERIALIZED through
+ *   a single promise chain and the rotation size is tracked in memory, so
+ *   the old "2 full reads + 1 full write per line" (O(n)/line, ~O(n²)/
+ *   session) collapses to "1 read + 1 write per line", strictly ordered.
+ *   A native `append_log_line` command (approach A) would make this O(1)/
+ *   line but is intentionally out of scope this round (no Rust changes).
+ *
  * Atomic-write is NOT used here. Append is intentionally non-atomic —
  *   we accept the (vanishingly rare) risk of a half-written line if the
- *   app is killed mid-write. The alternative (read-modify-write through
- *   the .tmp + rename dance for every line) would be wildly inefficient.
+ *   app is killed mid-write.
  *
  * Existing console.warn call sites in lib/ keep their console call AND
  *   add a `logger.warn(...)` next to it — see recentFiles.ts,
@@ -66,6 +80,28 @@ type LogLevel = 'INFO' | 'WARN' | 'ERROR';
 // the first write.
 let initPromise: Promise<string | null> | null = null;
 
+// cr-performance #3: running byte count of the CURRENT `app.log`. Seeded
+// ONCE during init from a single `stat` (or text read fallback) and then
+// kept up to date as lines are appended — so `rollIfNeeded` no longer
+// re-reads the whole file on every write. Reset to 0 on rotation.
+let currentLogBytes = 0;
+
+// cr-performance #3: serialized write tail. Every `appendLine` chains onto
+// this promise (mirrors `settingsStore.ts` writeQueue) so concurrent
+// fire-and-forget log calls can't interleave their read-modify-write and
+// drop lines. A failure inside one link is swallowed below; we also reset
+// the queue's rejection so a single failure never poisons later writes.
+let writeQueue: Promise<void> = Promise.resolve();
+
+/** UTF-8 byte length of a string. Log lines are mostly ASCII, but CJK
+ *  messages cost up to 3 bytes/char — count properly so the rotation
+ *  ceiling stays honest (cr-performance #3). */
+function byteLength(s: string): number {
+  // TextEncoder is available in the Tauri webview (and jsdom). Fall back
+  // to `.length` if it's somehow missing.
+  return typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(s).length : s.length;
+}
+
 /**
  * Resolve `<dataDir>\logs\` and ensure it exists. Also schedules a
  * one-shot cleanup of stale `.bak` archives. Returns the absolute logs
@@ -81,6 +117,10 @@ async function init(): Promise<string | null> {
       // created by the Rust shell on first launch.
       await mkdir(logsDir, { recursive: true });
     }
+    // cr-performance #3: seed the in-memory byte counter ONCE from the
+    // existing log file's size (single stat). After this, appendLine keeps
+    // the counter current so rollIfNeeded never re-reads the file.
+    currentLogBytes = await readCurrentLogBytes(logsDir);
     // Fire-and-forget the bak cleanup so the first log call isn't gated
     // on the dir scan.
     void cleanupOldBaks(logsDir);
@@ -89,6 +129,31 @@ async function init(): Promise<string | null> {
     // Logger init failed (most likely permissions); everything else
     // continues working — only logging is degraded.
     return null;
+  }
+}
+
+/**
+ * Read the current `app.log` size in bytes (cr-performance #3). Prefers a
+ * single `stat` (O(1), no file read); falls back to reading the text and
+ * measuring its UTF-8 length if `stat` is unavailable or fails. Returns 0
+ * when the file doesn't exist yet. Best-effort — any error yields 0.
+ */
+async function readCurrentLogBytes(logsDir: string): Promise<number> {
+  const current = `${logsDir}\\${LOG_FILE_NAME}`;
+  try {
+    if (!(await exists(current))) return 0;
+    try {
+      const info = await stat(current);
+      if (typeof info.size === 'number' && Number.isFinite(info.size)) {
+        return info.size;
+      }
+    } catch {
+      // stat unsupported / failed — fall through to the text-read path.
+    }
+    const existing = await readTextFile(current);
+    return byteLength(existing);
+  } catch {
+    return 0;
   }
 }
 
@@ -158,30 +223,25 @@ function fileSafeTimestamp(): string {
  * would exceed MAX_LOG_BYTES after appending `extraBytes` more bytes.
  * Best-effort: any failure leaves the existing file in place and we
  * just append to it as if nothing happened.
+ *
+ * cr-performance #3: uses the in-memory `currentLogBytes` counter (seeded
+ * once at init) instead of re-reading the whole file every write. On a
+ * successful rotation the counter resets to 0.
  */
 async function rollIfNeeded(logsDir: string, extraBytes: number): Promise<void> {
+  if (currentLogBytes + extraBytes < MAX_LOG_BYTES) return;
   try {
     const current = `${logsDir}\\${LOG_FILE_NAME}`;
-    if (!(await exists(current))) return;
-    // The Tauri fs plugin doesn't expose a stat call; we approximate the
-    // size by reading the file's text length. For files near the 5MB
-    // ceiling this is one one-time read that triggers a rotation, not
-    // a per-write cost — most writes will see a file well under the
-    // ceiling and exit fast.
-    //
-    // A more efficient approach (track byte count in module memory)
-    // would drift after restarts; the simple re-read keeps the truth
-    // on disk where it belongs.
-    const existing = await readTextFile(current);
-    // UTF-8 byte length is a stricter upper bound for the rotation
-    // check than `length` would be — but our log lines are mostly ASCII
-    // and approximating via `length + extraBytes` is enough to keep the
-    // file under the documented ceiling. The 5MB number is itself a
-    // soft cap, not a hard constraint.
-    if (existing.length + extraBytes < MAX_LOG_BYTES) return;
+    if (!(await exists(current))) {
+      // No file on disk — counter was stale; reset and skip the rename.
+      currentLogBytes = 0;
+      return;
+    }
     const stamp = fileSafeTimestamp();
     const archived = `${logsDir}\\${LOG_FILE_NAME}.${stamp}.bak`;
     await rename(current, archived);
+    // The fresh file starts empty.
+    currentLogBytes = 0;
   } catch {
     // Best-effort rotation; absorb errors and keep writing to the old
     // file. The next write will retry the rotation check.
@@ -191,24 +251,40 @@ async function rollIfNeeded(logsDir: string, extraBytes: number): Promise<void> 
 /**
  * Append a single log line to `app.log`. Creates the file if missing.
  * Performs rotation if appending would exceed the size cap.
+ *
+ * cr-performance #3: SERIALIZED through `writeQueue` so concurrent
+ * fire-and-forget calls can't interleave their read-modify-write and lose
+ * lines. The in-memory byte counter is advanced only after a successful
+ * write so a failed write doesn't drift the rotation accounting.
  */
-async function appendLine(line: string): Promise<void> {
-  const logsDir = await getLogsDir();
-  if (!logsDir) return;
-  const lineBytes = line.length; // approximate; see rollIfNeeded comment
-  await rollIfNeeded(logsDir, lineBytes);
-  const current = `${logsDir}\\${LOG_FILE_NAME}`;
-  try {
-    // Read-modify-write append: the Tauri fs plugin's writeTextFile
-    // does NOT support append mode (no `append: true` option in v2). For
-    // tiny log files this is fine — we pay one extra read per write but
-    // avoid pulling in a separate Rust command. If volume ever grows
-    // we'll add an `append_log_line` command on the Rust side.
-    const previous = (await exists(current)) ? await readTextFile(current) : '';
-    await writeTextFile(current, previous + line);
-  } catch {
-    // Swallow — the console mirror still got the message.
-  }
+function appendLine(line: string): Promise<void> {
+  // Chain onto the serialized tail. Each link does the full
+  // roll-check → read-modify-write, strictly after the previous link.
+  const task = writeQueue.then(async () => {
+    const logsDir = await getLogsDir();
+    if (!logsDir) return;
+    const lineBytes = byteLength(line);
+    await rollIfNeeded(logsDir, lineBytes);
+    const current = `${logsDir}\\${LOG_FILE_NAME}`;
+    try {
+      // Read-modify-write append: the Tauri fs plugin's writeTextFile
+      // does NOT support append mode (no `append: true` option in v2). We
+      // pay one read per write (down from the previous two) but avoid a
+      // separate Rust command (cr-performance #3, approach B). Because the
+      // queue serializes us, no other appendLine can read a stale `previous`
+      // between our read and our write.
+      const previous = (await exists(current)) ? await readTextFile(current) : '';
+      await writeTextFile(current, previous + line);
+      // Advance the in-memory size counter only on a successful write.
+      currentLogBytes += lineBytes;
+    } catch {
+      // Swallow — the console mirror still got the message.
+    }
+  });
+  // Never let one failed link reject the shared tail (which would skip all
+  // queued writes after it). Mirrors settingsStore.ts's belt-and-suspenders.
+  writeQueue = task.catch(() => {});
+  return writeQueue;
 }
 
 /** Format a single log line. */

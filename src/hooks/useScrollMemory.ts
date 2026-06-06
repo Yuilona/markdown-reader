@@ -1,11 +1,20 @@
 import { useEffect, useRef, type RefObject } from 'react';
 
-import { getScroll, saveScroll } from '../lib/scrollPositions';
+import { flushScroll, getScroll, saveScroll } from '../lib/scrollPositions';
 
-/** Debounce window for save-scroll-position writes (ms). 250ms balances
- *  "captures the user's resting position quickly" against "doesn't write
- *  on every wheel tick". */
+/** Debounce window for recording the resting position into the in-memory
+ *  cache (ms). 250ms balances "captures the user's resting position
+ *  quickly" against "doesn't churn on every wheel tick". cr-performance
+ *  #17: this `saveScroll` is now a cheap in-memory mutation (no disk I/O),
+ *  so the cadence stays snappy. */
 const SAVE_DEBOUNCE_MS = 250;
+
+/** Coarser debounce for the actual atomic DISK write (ms). cr-performance
+ *  #17: the per-tick read+filter+rewrite is gone — we now persist the
+ *  in-memory array at most once per ~1.5s of activity (plus on doc-swap /
+ *  unmount). 1.5s is short enough that a crash loses at most the last
+ *  ~1.5s of scrolling. */
+const FLUSH_DEBOUNCE_MS = 1500;
 
 /** How many requestAnimationFrame attempts we make to restore a saved Y
  *  before giving up. The first frame after a content swap has the DOM
@@ -43,8 +52,11 @@ export function useScrollMemory(
   // Track the path the listener is currently saving FOR. Used to flush
   // before swapping to a new doc.
   const activePathRef = useRef<string | null>(null);
-  // The pending save handle (window.setTimeout) so we can flush/cancel.
+  // The pending in-memory-save handle (window.setTimeout) so we can
+  // flush/cancel.
   const pendingTimerRef = useRef<number | null>(null);
+  // The pending DISK-flush handle (coarser debounce). cr-performance #17.
+  const flushTimerRef = useRef<number | null>(null);
   // The last scrollTop we observed — used by the flush path so we don't
   // need to re-read the DOM during cleanup.
   const lastYRef = useRef<number>(0);
@@ -64,6 +76,8 @@ export function useScrollMemory(
 
     const onScroll = () => {
       lastYRef.current = container.scrollTop;
+      // 1) Record the resting position into the in-memory cache (cheap,
+      //    no disk I/O — cr-performance #17), debounced at 250ms.
       if (pendingTimerRef.current !== null) {
         window.clearTimeout(pendingTimerRef.current);
       }
@@ -72,24 +86,42 @@ export function useScrollMemory(
         pendingTimerRef.current = null;
         void saveScroll(pathAtSchedule, lastYRef.current);
       }, SAVE_DEBOUNCE_MS);
+      // 2) Schedule a coarser disk flush so we persist at most ~once per
+      //    1.5s of continuous scrolling instead of rewriting the file on
+      //    every 250ms tick (cr-performance #17).
+      if (flushTimerRef.current !== null) {
+        window.clearTimeout(flushTimerRef.current);
+      }
+      flushTimerRef.current = window.setTimeout(() => {
+        flushTimerRef.current = null;
+        void flushScroll();
+      }, FLUSH_DEBOUNCE_MS);
     };
 
     container.addEventListener('scroll', onScroll, { passive: true });
 
     return () => {
       container.removeEventListener('scroll', onScroll);
-      // Flush a pending save synchronously so the doc swap doesn't drop
-      // the user's last position. We DO need to await it logically, but
-      // we can't in a cleanup function — fire-and-forget is acceptable
-      // here because the write goes through atomic .tmp + rename, so a
-      // tear-down race can't corrupt the file.
+      // Flush before the doc swap so the next doc can't lose the previous
+      // doc's position. Apply the pending in-memory save first (so the
+      // very latest Y is recorded), then write to disk. Both are
+      // fire-and-forget — the write goes through atomic .tmp + rename, so
+      // a tear-down race can't corrupt the file. We chain the disk flush
+      // AFTER the in-memory save resolves so the snapshot includes the
+      // last position.
       if (pendingTimerRef.current !== null) {
         window.clearTimeout(pendingTimerRef.current);
         pendingTimerRef.current = null;
-        const pathToFlush = activePathRef.current;
-        if (pathToFlush) {
-          void saveScroll(pathToFlush, lastYRef.current);
-        }
+      }
+      if (flushTimerRef.current !== null) {
+        window.clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
+      }
+      const pathToFlush = activePathRef.current;
+      if (pathToFlush) {
+        void saveScroll(pathToFlush, lastYRef.current).then(() => flushScroll());
+      } else {
+        void flushScroll();
       }
     };
   }, [scrollContainerRef, currentDocPath]);

@@ -21,13 +21,18 @@ export interface SearchFlags {
 }
 
 export interface SearchState {
-  /** Total number of matches found (0 when no input or invalid regex). */
+  /** Total number of matches found (0 when no input or invalid regex).
+   *  Capped at MAX_MATCHES when `truncated` is true (cr-performance #16). */
   total: number;
   /** Zero-based index of the currently-focused match, or -1 when none. */
   currentIndex: number;
   /** True when the input is non-empty but produced 0 matches. UI uses
    *  this to colour the counter red. */
   isInvalid: boolean;
+  /** True when collection hit the MAX_MATCHES cap (or the walk's time
+   *  budget) and stopped early (cr-performance #16/#13). The SearchBar
+   *  shows the count with a trailing "+". */
+  truncated: boolean;
 }
 
 export interface UseSearchReturn extends SearchState {
@@ -93,6 +98,8 @@ export function useSearch(opts: UseSearchOptions): UseSearchReturn {
   const [total, setTotal] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [isInvalid, setIsInvalid] = useState(false);
+  // cr-performance #16: true when findMatches stopped at MAX_MATCHES.
+  const [truncated, setTruncated] = useState(false);
 
   // Live list of wrapped `<mark>` elements. Kept in a ref because it
   // changes outside React's reconciliation (the DOM is the source of
@@ -125,6 +132,7 @@ export function useSearch(opts: UseSearchOptions): UseSearchReturn {
         setTotal(0);
         setCurrentIndex(-1);
         setIsInvalid(false);
+        setTruncated(false);
         return;
       }
 
@@ -137,16 +145,19 @@ export function useSearch(opts: UseSearchOptions): UseSearchReturn {
         setTotal(0);
         setCurrentIndex(-1);
         setIsInvalid(false);
+        setTruncated(false);
         return;
       }
 
       const pattern = buildPattern(text, currentFlags);
       if (!pattern) {
-        // Invalid regex (or empty input we already filtered above) —
+        // Invalid regex (or empty input we already filtered above, or a
+        // regex pattern rejected as too long — cr-performance #13) —
         // signal the counter to paint red.
         setTotal(0);
         setCurrentIndex(-1);
         setIsInvalid(true);
+        setTruncated(false);
         return;
       }
 
@@ -159,9 +170,13 @@ export function useSearch(opts: UseSearchOptions): UseSearchReturn {
         skipSelectors.push('[data-frontmatter-body]');
       }
 
-      const matches = findMatches(root, pattern, { skipSelectors });
+      // cr-performance #16: findMatches caps at MAX_MATCHES and reports
+      // truncation so we can surface "N+" instead of freezing on a wide
+      // query in a large document.
+      const { matches, truncated: wasTruncated } = findMatches(root, pattern, { skipSelectors });
       const marks = highlightMatches(matches);
       markListRef.current = marks;
+      setTruncated(wasTruncated);
 
       if (marks.length === 0) {
         setTotal(0);
@@ -257,6 +272,7 @@ export function useSearch(opts: UseSearchOptions): UseSearchReturn {
     setTotal(0);
     setCurrentIndex(-1);
     setIsInvalid(false);
+    setTruncated(false);
   }, [isOpen, articleRef]);
 
   // ---- Effect: clean up on unmount (e.g. DocumentView swap). ----
@@ -305,6 +321,7 @@ export function useSearch(opts: UseSearchOptions): UseSearchReturn {
     setTotal(0);
     setCurrentIndex(-1);
     setIsInvalid(false);
+    setTruncated(false);
   }, [articleRef]);
 
   return useMemo<UseSearchReturn>(
@@ -314,12 +331,13 @@ export function useSearch(opts: UseSearchOptions): UseSearchReturn {
       total,
       currentIndex,
       isInvalid,
+      truncated,
       setQuery,
       setFlag,
       next,
       previous,
       clear,
     }),
-    [query, flags, total, currentIndex, isInvalid, setQuery, setFlag, next, previous, clear],
+    [query, flags, total, currentIndex, isInvalid, truncated, setQuery, setFlag, next, previous, clear],
   );
 }
