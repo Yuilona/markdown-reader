@@ -4,7 +4,7 @@ import type { Components } from 'react-markdown';
 import type { PluggableList } from 'unified';
 import { convertFileSrc } from '@tauri-apps/api/core';
 
-import { remarkPlugins, rehypePlugins } from '../../lib/markdownPlugins';
+import { remarkPlugins, rehypePlugins, rehypePluginsNoHighlight } from '../../lib/markdownPlugins';
 import { rehypeMermaidPretag } from '../../lib/rehypeMermaidPretag';
 import { rehypeSourceLine, rehypeSourceLineApply, readSourceLine } from '../../lib/rehypeSourceLine';
 import { splitFrontmatter, frontmatterLineOffset } from '../../lib/parseFrontmatter';
@@ -126,6 +126,22 @@ const rehypePluginsWithMermaid: PluggableList = [
   // (and whose position it dropped). See rehypeSourceLine.ts.
   rehypeSourceLineApply,
 ];
+
+// R3 (cr-performance #4): the same chain WITHOUT Shiki, used for very large
+// documents so the first paint doesn't pay synchronous full-document syntax
+// tokenization (the dominant cost). Code renders unhighlighted; source-line
+// stamps, mermaid, katex, and headings are all unchanged.
+const rehypePluginsNoHighlightWithMermaid: PluggableList = [
+  rehypeSourceLine,
+  rehypeMermaidPretag,
+  ...rehypePluginsNoHighlight,
+  rehypeSourceLineApply,
+];
+
+/** Char-count threshold above which Shiki is dropped on first paint (R3).
+ * ~2M chars (~2MB of ASCII); tuned to avoid multi-second main-thread freezes
+ * on huge docs while leaving every normal doc fully highlighted. */
+const LARGE_DOC_CHARS = 2_000_000;
 
 export function DocumentView({
   doc,
@@ -437,17 +453,25 @@ export function DocumentView({
   // (bufferText changes each key but `body` only updates past the 500ms
   // debounce). `components` is already useMemo-stable and the plugin
   // arrays are module constants.
+  // R3 (cr-performance #4): above the size threshold, drop Shiki so the first
+  // paint of a very large doc stays responsive. Both branches are module
+  // constants, so this only re-memoizes markdownEl when crossing the threshold.
+  const activeRehypePlugins =
+    body.length > LARGE_DOC_CHARS
+      ? rehypePluginsNoHighlightWithMermaid
+      : rehypePluginsWithMermaid;
+
   const markdownEl = useMemo(
     () => (
       <Markdown
         remarkPlugins={remarkPlugins}
-        rehypePlugins={rehypePluginsWithMermaid}
+        rehypePlugins={activeRehypePlugins}
         components={components}
       >
         {body}
       </Markdown>
     ),
-    [body, components],
+    [body, components, activeRehypePlugins],
   );
 
   return (

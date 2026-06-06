@@ -17,7 +17,12 @@
  *   page (and is implicitly cleared on `window.beforeunload`).
  */
 
-const cache = new Map<string, string>();
+import { LruMap } from './lruMap';
+
+// R4 (cr-performance #14): bounded LRU instead of an unbounded Map, so browsing
+// many diagram-heavy docs in one session can't accumulate every rendered SVG
+// forever. get() bumps recency; set() evicts the oldest past the cap.
+const cache = new LruMap<string, string>(64);
 
 function key(source: string, theme: string): string {
   return `${theme}::${source}`;

@@ -69,15 +69,15 @@
 
 ## Acceptance Criteria
 
-- [ ] R1：改一处代码后，未改动的代码块不重新分词（缓存命中可观测）；大文档（如 >2MB / 多代码块）首屏不再产生数秒级主线程冻结
-- [ ] R2：连续写日志不再随文件增大而变慢；并发错误突发不丢行；`cargo check` 通过
-- [ ] R3：打开超阈值大文件时 UI 不长时间无响应（先出内容/有提示）
-- [ ] R4：长时间浏览大量含图文档，mermaid 缓存条目数有界
-- [ ] R5：超大文档上宽查询不再生成无上限 `<mark>`、不长时间冻结；计数显示「N+」
-- [ ] R6：编辑模式下行间移动的同步开销与文档块数解耦（不再每次全量扫描）
-- [ ] R7：恶意/坏正则不再冻结窗口
-- [ ] R8：连续滚动时不再每 250ms 整文件读改写
-- [ ] 全程 `pnpm exec tsc --noEmit` + `pnpm test` 通过；动 Rust 后 `cargo check` 通过；无功能回归
+> 本轮范围 = **高影响子集 PR-1（R1 + R3 + R4，用户选定）**。R2/R5/R6/R7/R8 留待下一轮，故任务**未归档**、保持 `in_progress`。
+
+- [x] R1：`rehypeShikiFromHighlighter` 传入 LRU `cache`（键 `${lang}:${meta}:${code}`）→ 未改动的代码块不重分词；大文档 >2M 字符走无 Shiki 链，不再全文同步分词
+- [x] R3：`DocumentView` 加 `LARGE_DOC_CHARS=2_000_000` 阈值，超阈值用 `rehypePluginsNoHighlightWithMermaid`（省略 Shiki，代码 plain `<pre>`；source-line/mermaid/katex/标题 不变）；可见提示作为可选项推迟
+- [x] R4：`mermaidCache` 换 `LruMap(64)`（get 命中移尾、set 超限淘汰最旧），修无界内存增长；`clearCacheForTheme` 行为不变
+- [x] PR-1 验证：`pnpm exec tsc --noEmit`(0) + `pnpm test`(50/50，含新增 `lruMap.test.ts` 6 例) + `pnpm build`(ok)；纯前端无 Rust 改动；无功能回归
+- [ ] R2（下轮，按「JS 写队列+内存计数」） / R5 / R6 / R7 / R8 —— 本轮未做
+
+> 建议（可选）：用代码密集大文档 + 多 Mermaid 文档目检：编辑时不再每次全文卡顿、缓存命中可观测；浏览多图文档内存有界。
 
 ## Out of Scope
 

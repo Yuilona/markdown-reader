@@ -7,6 +7,9 @@ import rehypeShikiFromHighlighter from '@shikijs/rehype/core';
 import { createHighlighterCore } from 'shiki/core';
 import { createOnigurumaEngine } from 'shiki/engine/oniguruma';
 import type { PluggableList } from 'unified';
+import type { Root } from 'hast';
+
+import { LruMap } from './lruMap';
 
 /**
  * Plugin chain for `react-markdown` (PR-2 scope + PR-6 dual-theme).
@@ -79,13 +82,27 @@ export const remarkPlugins: PluggableList = [
  * this plugin, react-markdown emits headings WITHOUT ids and every
  * anchor click silently no-ops.
  */
-export const rehypePlugins: PluggableList = [
+/** R1 (cr-performance #1): memoize Shiki output per `${lang}:${meta}:${code}`
+ * so unchanged code blocks aren't re-tokenized when an unrelated part of the
+ * doc changes (react-markdown re-runs the whole remark/rehype/Shiki pipeline
+ * on every body change — e.g. each 500ms edit-mode debounce). Bounded by an
+ * LRU cap so it can't grow without limit across a session of many docs. */
+const shikiCache = new LruMap<string, Root>(512);
+
+/** Shared, highlight-free base: heading ids + KaTeX. Used as the prefix of the
+ * full chain AND directly as the large-document fallback chain (see
+ * `rehypePluginsNoHighlight`). */
+const rehypeBase: PluggableList = [
   // R7.4 prerequisite: stamp deterministic ids on headings so the link
   // router's anchor-scroll branch can find the target.
   rehypeSlug,
   // R12.3: never throw on bad formulas — KaTeX renders a red-styled
   // .katex-error span containing the original source.
   [rehypeKatex, { throwOnError: false, errorColor: '#cc0000' }],
+];
+
+export const rehypePlugins: PluggableList = [
+  ...rehypeBase,
   [
     rehypeShikiFromHighlighter,
     highlighter,
@@ -104,6 +121,16 @@ export const rehypePlugins: PluggableList = [
       // If the markdown specifies an unknown lang, fall back to plain text
       // instead of throwing.
       fallbackLanguage: 'text',
+      // R1: per-code-block memoization (see `shikiCache` above).
+      cache: shikiCache,
     },
   ],
 ];
+
+/** R3 (cr-performance #4): the Shiki-less chain for the large-document
+ * fallback. Above a size threshold, DocumentView swaps to this so a multi-MB
+ * doc doesn't pay synchronous full-document Oniguruma tokenization on first
+ * paint. Code still renders as `<pre><code class="language-xxx">` (the class
+ * comes from remark, not Shiki), so CodeBlock's label + copy still work — only
+ * the token coloring is dropped. */
+export const rehypePluginsNoHighlight: PluggableList = rehypeBase;

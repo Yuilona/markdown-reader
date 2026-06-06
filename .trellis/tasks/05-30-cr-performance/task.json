@@ -3,7 +3,7 @@
   "name": "cr-performance",
   "title": "CR-Performance: Shiki cache / logger / large-file guard / caches",
   "description": "Per-block Shiki cache, logger append via Rust, large-file guard, mermaid cache LRU, scroll-sync/search/scroll-mem perf (#1/#3/#4/#13/#14/#15/#16/#17).",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
