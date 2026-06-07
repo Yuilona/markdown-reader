@@ -3,7 +3,7 @@
   "name": "xplat-ci",
   "title": "xplat CI: tri-platform GitHub Actions matrix",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

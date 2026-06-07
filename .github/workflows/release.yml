@@ -1,9 +1,11 @@
 name: release
 
-# Push a tag like v1.1.0 → build the Tauri app on Windows and publish a
-# GitHub Release with the NSIS + MSI installers attached. This guarantees
-# the released artifact is the one CI built (not a local machine), closing
-# the "works in dev, white-screen in the shipped build" gap.
+# Push a tag like v1.4.0 → build the Tauri app on Windows, macOS, and Linux
+# and publish a single GitHub Release with every platform's installers
+# attached. Building on CI (not a local machine) guarantees the shipped
+# artifact is the one CI built, closing the "works in dev, white-screen in
+# the shipped build" gap. A tag containing '-' (e.g. v1.4.0-rc.1) is
+# published as a pre-release.
 on:
   push:
     tags:
@@ -14,9 +16,32 @@ permissions:
 
 jobs:
   release:
-    runs-on: windows-latest
+    strategy:
+      # Don't cancel the other platforms if one fails — we want to see every
+      # platform's result from a single tag push.
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            args: ''
+          # One universal dmg that runs on both Intel and Apple Silicon, so
+          # users never have to pick the right architecture.
+          - platform: macos-latest
+            args: '--target universal-apple-darwin'
+          - platform: ubuntu-22.04
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+
+      # Tauri 2 Linux build deps. webkit2gtk-4.1 is the Tauri 2 line (4.0 is
+      # Tauri 1). patchelf + librsvg are needed to bundle the AppImage.
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - uses: pnpm/action-setup@v4
         with:
@@ -28,6 +53,10 @@ jobs:
           cache: pnpm
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          # Both macOS arch targets are only needed on the macOS runner (for
+          # the universal build); the conditional keeps Windows/Linux lean.
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - uses: swatinem/rust-cache@v2
         with:
@@ -38,7 +67,8 @@ jobs:
 
       # tauri-action runs `tauri build` (which runs beforeBuildCommand
       # `pnpm build`), then creates/updates the release for this tag and
-      # uploads the bundled NSIS .exe + MSI.
+      # uploads each platform's bundles (Windows nsis+msi, macOS dmg,
+      # Linux deb+appimage) to the same Release.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -46,4 +76,5 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: ${{ github.ref_name }}
           releaseDraft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          args: ${{ matrix.args }}
