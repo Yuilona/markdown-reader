@@ -11,8 +11,8 @@ use file_watcher::WatcherState;
 /// Tauri command exposed to the frontend.
 /// Returns the absolute path of the portable data directory as a string.
 #[tauri::command]
-fn get_data_dir() -> String {
-    data_dir::data_dir().to_string_lossy().to_string()
+fn get_data_dir(state: State<'_, data_dir::DataDir>) -> String {
+    state.0.to_string_lossy().to_string()
 }
 
 /// Holds the CLI-launch markdown path (if any). Read by the frontend once
@@ -104,9 +104,12 @@ pub fn run() {
         // PR-5b: shell plugin powers R7 link routing (`shell.open` for
         // http/https/mailto + non-md local files).
         .plugin(tauri_plugin_shell::init())
-        .setup(|_app| {
-            // Force creation of the data dir on first launch.
-            let _ = data_dir::data_dir();
+        .setup(|app| {
+            // Resolve the platform data dir once (Windows: portable, next to
+            // the exe; macOS/Linux: OS app-data dir) and cache it in managed
+            // state. Also creates it on first launch.
+            let dir = data_dir::resolve_and_create(app.handle());
+            app.manage(data_dir::DataDir(dir));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

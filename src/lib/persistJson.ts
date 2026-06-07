@@ -1,6 +1,7 @@
 import { readTextFile, writeTextFile, rename, exists } from '@tauri-apps/plugin-fs';
 
 import { getDataDir } from './tauri';
+import { joinUnder } from './pathUtils';
 import * as logger from './logger';
 
 /**
@@ -65,11 +66,11 @@ export async function atomicWriteJson<T>(name: string, data: T): Promise<Persist
 }
 
 /**
- * Manual join: the Rust `get_data_dir` command returns an absolute Windows
- * path without a trailing separator. Avoiding `@tauri-apps/api/path` here
- * keeps this helper synchronous-shaped and skips an extra IPC round-trip
- * per write.
+ * Join a filename onto the data dir. Delegates to the platform-aware
+ * `joinUnder` (which infers the separator from `dir`) so it works on
+ * Windows / macOS / Linux. Kept as a thin local wrapper to preserve the
+ * `(name, dir)` argument order of the existing call sites.
  */
 function joinDataPath(name: string, dir: string): string {
-  return `${dir}\\${name}`;
+  return joinUnder(dir, name);
 }

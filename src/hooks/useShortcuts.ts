@@ -9,6 +9,14 @@ import { useTheme } from '../components/ThemeProvider/useTheme';
 import { nextMode } from '../components/ThemeProvider/themeCycle';
 import { usePageZoom } from '../components/PageZoom/usePageZoom';
 import * as logger from '../lib/logger';
+import { IS_MAC } from '../lib/pathUtils';
+
+/**
+ * Platform-aware modifier check: ⌘ (metaKey) on macOS, Ctrl elsewhere.
+ * CodeMirror's own keymaps use `Mod-`, which already maps to ⌘ on macOS,
+ * so this only governs the global (read-mode) shortcuts below.
+ */
+const mod = (ev: KeyboardEvent): boolean => (IS_MAC ? ev.metaKey : ev.ctrlKey);
 
 interface UseShortcutsOptions {
   /** Invoked when Ctrl+O picks a file. Optional so PR-1-era callers
@@ -145,16 +153,16 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
 
   useEffect(() => {
     const handler = async (e: KeyboardEvent) => {
-      // Ctrl+O on Windows; on macOS Cmd+O would use metaKey, but v0.1 is
-      // Windows-only.
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'o') {
+      // Ctrl+O (⌘O on macOS) opens the native file dialog. The `mod`
+      // helper resolves the platform modifier (Ctrl vs ⌘).
+      if (mod(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'o') {
         e.preventDefault();
         const doc = await openFileDialog();
         if (doc && onOpenDocument) onOpenDocument(doc);
         return;
       }
       // Ctrl+T cycles theme (R13).
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 't') {
+      if (mod(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 't') {
         e.preventDefault();
         setMode(nextMode(mode));
         return;
@@ -162,7 +170,7 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
       // Ctrl+E toggles edit/read mode (v1.0 PR-A, R-EDIT-3.2). Fires
       // even when focus is inside CM6 — there's no CM6 default binding
       // for Mod-e, so we don't conflict.
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'e') {
+      if (mod(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'e') {
         e.preventDefault();
         if (onToggleEditMode) onToggleEditMode();
         return;
@@ -170,7 +178,7 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
       // Ctrl+Shift+S = Save As (v1.0 PR-B, R-EDIT-6.3). Checked BEFORE the
       // plain Ctrl+S branch (which requires !shiftKey) so the two don't
       // collide. Fires even inside CM6.
-      if (e.ctrlKey && e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') {
+      if (mod(e) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') {
         e.preventDefault();
         if (onSaveAsDocument) onSaveAsDocument();
         return;
@@ -179,14 +187,14 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
       // even when focus is inside CM6 — CM6's default has no Mod-s
       // binding (the browser would otherwise open the Save Page As
       // dialog, which preventDefault below suppresses).
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') {
+      if (mod(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') {
         e.preventDefault();
         if (onSaveDocument) onSaveDocument();
         return;
       }
       // Ctrl+N creates a new unnamed buffer + enters edit mode (v1.0
       // PR-B, R-EDIT-6.1). Fires even inside CM6.
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'n') {
+      if (mod(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'n') {
         e.preventDefault();
         if (onNewDocument) onNewDocument();
         return;
@@ -196,7 +204,7 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
       // Mod-f binding (from basicSetup's searchKeymap) opens its
       // search panel (R-EDIT-2.5). We don't preventDefault either, so
       // the event reaches CM6's listener untouched.
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+      if (mod(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
         if (isInCodeMirror(e.target)) return;
         e.preventDefault();
         if (onOpenSearch) onOpenSearch();
@@ -209,7 +217,7 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
       // Ctrl+\ toggles TOC (R13, PR-7). The key string for backslash is
       // literally '\' on every keyboard layout that has one — Windows
       // delivers it as such regardless of locale.
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key === '\\') {
+      if (mod(e) && !e.shiftKey && !e.altKey && e.key === '\\') {
         e.preventDefault();
         if (onToggleToc) onToggleToc();
         return;
@@ -219,14 +227,14 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
       // double-fire (it would call the same window.print() anyway, but
       // suppressing keeps the contract single-source-of-truth in the
       // app).
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'p') {
+      if (mod(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'p') {
         e.preventDefault();
         window.print();
         return;
       }
       // Ctrl+W closes the current file (R13, PR-9). App.tsx wraps the
       // handler with the dirty-guard in v1.0; we just dispatch.
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'w') {
+      if (mod(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'w') {
         e.preventDefault();
         if (onCloseDocument) onCloseDocument();
         return;
@@ -243,7 +251,7 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
       // App.tsx is responsible for replacing this code path with a
       // guarded version if the caller wants one — see App.tsx's
       // onCloseRequested + Ctrl+W wiring for the pattern.
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'q') {
+      if (mod(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'q') {
         e.preventDefault();
         try {
           await quitApp();
@@ -256,14 +264,14 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
       // same `loadDocument(path, { skipRecent: true })` path the
       // file-watcher uses — preserves scroll position and does NOT
       // bump the recent-list.
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'r') {
+      if (mod(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'r') {
         e.preventDefault();
         if (onReloadDocument) onReloadDocument();
         return;
       }
       // F5 is the alternate reload shortcut (R13, PR-9). No modifiers —
       // a bare F5 keypress. Matches browser convention.
-      if (!e.ctrlKey && !e.shiftKey && !e.altKey && e.key === 'F5') {
+      if (!mod(e) && !e.shiftKey && !e.altKey && e.key === 'F5') {
         e.preventDefault();
         if (onReloadDocument) onReloadDocument();
         return;
@@ -273,20 +281,20 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
       // accept both so neither physical keypress habit is broken.
       // We do NOT require !e.shiftKey here for the `+` branch —
       // pressing the `+` key always involves Shift on a US/CN layout.
-      if (e.ctrlKey && !e.altKey && (e.key === '=' || e.key === '+')) {
+      if (mod(e) && !e.altKey && (e.key === '=' || e.key === '+')) {
         e.preventDefault();
         zoomIn();
         return;
       }
       // Ctrl+- page-zoom out (R13, R10.5, PR-9).
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key === '-') {
+      if (mod(e) && !e.shiftKey && !e.altKey && e.key === '-') {
         e.preventDefault();
         zoomOut();
         return;
       }
       // Ctrl+0 page-zoom reset (R13, R10.5, PR-9). The KeyboardEvent's
       // `key` for the digit row is the literal digit character.
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key === '0') {
+      if (mod(e) && !e.shiftKey && !e.altKey && e.key === '0') {
         e.preventDefault();
         resetZoom();
         return;
@@ -294,7 +302,7 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
       // F11 toggles window fullscreen (R13, PR-9). Bare F11 — no
       // modifiers. Errors are caught + logged; transient toggle failure
       // shouldn't pop a toast.
-      if (!e.ctrlKey && !e.shiftKey && !e.altKey && e.key === 'F11') {
+      if (!mod(e) && !e.shiftKey && !e.altKey && e.key === 'F11') {
         e.preventDefault();
         try {
           await toggleFullscreen();

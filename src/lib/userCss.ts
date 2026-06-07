@@ -1,6 +1,7 @@
 import { exists, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 
 import { getDataDir } from './tauri';
+import { joinUnder } from './pathUtils';
 import * as logger from './logger';
 // The bundled Claude "Quiet Serif" theme, inlined as a string at build time
 // (Vite `?raw`). This is the single source of truth seeded into
@@ -46,7 +47,7 @@ const STYLE_TAG_ID = 'markdown-reader-user-css';
 export async function loadUserCss(): Promise<void> {
   try {
     const dir = await getDataDir();
-    const path = `${dir}\\user.css`;
+    const path = joinUnder(dir, 'user.css');
 
     let css: string;
     if (await exists(path)) {
@@ -54,7 +55,7 @@ export async function loadUserCss(): Promise<void> {
       // never overwrite.
       css = await readTextFile(path);
     } else {
-      const sentinel = `${dir}\\.theme-seeded`;
+      const sentinel = joinUnder(dir, '.theme-seeded');
       if (await exists(sentinel)) {
         // Seeded once before, then deleted by the user → respect that
         // choice and fall back to the plain default theme.

@@ -1,7 +1,7 @@
 import { exists, remove } from '@tauri-apps/plugin-fs';
 
 import { getDataDir } from './tauri';
-import { normalizePath, pathsEqual } from './pathUtils';
+import { normalizePath, pathsEqual, joinUnder } from './pathUtils';
 import { atomicWriteJson, readJson } from './persistJson';
 import * as logger from './logger';
 
@@ -132,7 +132,7 @@ export async function cleanupStaleTemp(): Promise<void> {
   try {
     const dir = await getDataDir();
     for (const tmpName of [TMP_NAME, 'scroll-positions.json.tmp']) {
-      const tmpPath = `${dir}\\${tmpName}`;
+      const tmpPath = joinUnder(dir, tmpName);
       if (await exists(tmpPath)) {
         await remove(tmpPath);
       }

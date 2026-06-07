@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react';
 import { open as shellOpen } from '@tauri-apps/plugin-shell';
 
-import { dirname, isMarkdownPath, normalizePath } from './pathUtils';
+import { dirname, isMarkdownPath, normalizePath, joinUnder } from './pathUtils';
 import * as logger from './logger';
 
 /**
@@ -139,10 +139,11 @@ function resolveLocalPath(rawHref: string, docPath: string): string | null {
   if (!docPath) return null;
   const base = dirname(docPath);
   if (!base) return null;
-  // Naive join: backslash separator. We don't collapse `..` or `.` here
-  // — the OS-level file open will follow them correctly. If the user
-  // wrote `../foo/bar.md`, that's fine; the system sees it the same.
-  return normalizePath(`${base}\\${decoded}`);
+  // Join with the base dir's own separator (joinUnder infers it). We don't
+  // collapse `..` or `.` here — the OS-level file open will follow them
+  // correctly. If the user wrote `../foo/bar.md`, that's fine; the system
+  // sees it the same.
+  return normalizePath(joinUnder(base, decoded));
 }
 
 /** Smooth-scroll within the current document to the heading with the

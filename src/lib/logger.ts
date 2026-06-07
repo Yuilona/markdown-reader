@@ -10,6 +10,7 @@ import {
 } from '@tauri-apps/plugin-fs';
 
 import { getDataDir } from './tauri';
+import { joinUnder } from './pathUtils';
 
 /**
  * Rolling-file logger (R10.9, R12.7, PR-8).
@@ -111,7 +112,7 @@ function byteLength(s: string): number {
 async function init(): Promise<string | null> {
   try {
     const dataDir = await getDataDir();
-    const logsDir = `${dataDir}\\${LOG_DIR_NAME}`;
+    const logsDir = joinUnder(dataDir, LOG_DIR_NAME);
     if (!(await exists(logsDir))) {
       // `recursive: true` covers the case where `data/` itself was just
       // created by the Rust shell on first launch.
@@ -139,7 +140,7 @@ async function init(): Promise<string | null> {
  * when the file doesn't exist yet. Best-effort — any error yields 0.
  */
 async function readCurrentLogBytes(logsDir: string): Promise<number> {
-  const current = `${logsDir}\\${LOG_FILE_NAME}`;
+  const current = joinUnder(logsDir, LOG_FILE_NAME);
   try {
     if (!(await exists(current))) return 0;
     try {
@@ -184,7 +185,7 @@ async function cleanupOldBaks(logsDir: string): Promise<void> {
       if (ts === null) continue;
       if (now - ts > CLEANUP_AFTER_MS) {
         try {
-          await remove(`${logsDir}\\${name}`);
+          await remove(joinUnder(logsDir, name));
         } catch {
           // Ignore individual delete failures.
         }
@@ -231,14 +232,14 @@ function fileSafeTimestamp(): string {
 async function rollIfNeeded(logsDir: string, extraBytes: number): Promise<void> {
   if (currentLogBytes + extraBytes < MAX_LOG_BYTES) return;
   try {
-    const current = `${logsDir}\\${LOG_FILE_NAME}`;
+    const current = joinUnder(logsDir, LOG_FILE_NAME);
     if (!(await exists(current))) {
       // No file on disk — counter was stale; reset and skip the rename.
       currentLogBytes = 0;
       return;
     }
     const stamp = fileSafeTimestamp();
-    const archived = `${logsDir}\\${LOG_FILE_NAME}.${stamp}.bak`;
+    const archived = joinUnder(logsDir, `${LOG_FILE_NAME}.${stamp}.bak`);
     await rename(current, archived);
     // The fresh file starts empty.
     currentLogBytes = 0;
@@ -265,7 +266,7 @@ function appendLine(line: string): Promise<void> {
     if (!logsDir) return;
     const lineBytes = byteLength(line);
     await rollIfNeeded(logsDir, lineBytes);
-    const current = `${logsDir}\\${LOG_FILE_NAME}`;
+    const current = joinUnder(logsDir, LOG_FILE_NAME);
     try {
       // Read-modify-write append: the Tauri fs plugin's writeTextFile
       // does NOT support append mode (no `append: true` option in v2). We
