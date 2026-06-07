@@ -8,7 +8,7 @@ import { remarkPlugins, rehypePlugins, rehypePluginsNoHighlight } from '../../li
 import { rehypeMermaidPretag } from '../../lib/rehypeMermaidPretag';
 import { rehypeSourceLine, rehypeSourceLineApply, readSourceLine } from '../../lib/rehypeSourceLine';
 import { splitFrontmatter, frontmatterLineOffset } from '../../lib/parseFrontmatter';
-import { dirname, normalizePath } from '../../lib/pathUtils';
+import { dirname, normalizePath, joinUnder } from '../../lib/pathUtils';
 import { handleLinkClick, useLinkRouter } from '../../lib/linkRouter';
 import type { LoadedDocument } from '../../lib/tauri';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
@@ -683,7 +683,7 @@ export function resolveImageSrc(src: string | undefined, docDir: string): string
       // so the placeholder shows.
       return undefined;
     }
-    absolute = normalizePath(`${docDir}\\${decoded}`);
+    absolute = normalizePath(joinUnder(docDir, decoded));
   }
 
   return convertFileSrc(absolute);
