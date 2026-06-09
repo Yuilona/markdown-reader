@@ -7,6 +7,9 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { remarkPlugins, rehypePlugins, rehypePluginsNoHighlight } from '../../lib/markdownPlugins';
 import { rehypeMermaidPretag } from '../../lib/rehypeMermaidPretag';
 import { rehypeSourceLine, rehypeSourceLineApply, readSourceLine } from '../../lib/rehypeSourceLine';
+import rehypeRaw from 'rehype-raw';
+import rehypeSanitize from 'rehype-sanitize';
+import { sanitizeSchema } from '../../lib/sanitizeSchema';
 import { splitFrontmatter, frontmatterLineOffset } from '../../lib/parseFrontmatter';
 import { dirname, normalizePath, joinUnder } from '../../lib/pathUtils';
 import { handleLinkClick, useLinkRouter } from '../../lib/linkRouter';
@@ -119,21 +122,40 @@ interface DocumentViewProps {
  * expanded" rule.
  */
 const rehypePluginsWithMermaid: PluggableList = [
-  rehypeSourceLine,
+  // 1. Capture mermaid source from the PRISTINE code-fence text BEFORE
+  //    rehype-raw could reparse anything; sets data-mermaid-source on <pre>.
   rehypeMermaidPretag,
+  // 2. Reparse raw HTML strings (<img>, <table>, …) into real hast nodes.
+  //    react-markdown v10 already runs remark-rehype with allowDangerousHtml,
+  //    so without this, author-written HTML is escaped to plain text.
+  rehypeRaw,
+  // 3. Sanitize the now-real nodes IMMEDIATELY (strict allowlist): strips
+  //    <style>/style=, <iframe>/<object>/<meta>/<base>, on* handlers, etc.
+  //    MUST run before the plugins below, or it would strip the attributes
+  //    THEY add (heading id, KaTeX classes/MathML, Shiki language-*/inline
+  //    style, data-source-line).
+  [rehypeSanitize, sanitizeSchema],
+  // 4. First-pass source-line stamping — AFTER sanitize so the data-source-line
+  //    attribute survives (sanitize drops data-* by default).
+  rehypeSourceLine,
+  // 5. slug + KaTeX + Shiki (all after sanitize so their output isn't stripped).
   ...rehypePlugins,
-  // Runs AFTER Shiki to re-stamp code blocks whose <pre> Shiki replaced
-  // (and whose position it dropped). See rehypeSourceLine.ts.
+  // 6. Runs AFTER Shiki to re-stamp code blocks whose <pre> Shiki replaced
+  //    (and whose position it dropped). See rehypeSourceLine.ts.
   rehypeSourceLineApply,
 ];
 
 // R3 (cr-performance #4): the same chain WITHOUT Shiki, used for very large
 // documents so the first paint doesn't pay synchronous full-document syntax
 // tokenization (the dominant cost). Code renders unhighlighted; source-line
-// stamps, mermaid, katex, and headings are all unchanged.
+// stamps, mermaid, katex, raw-HTML + sanitize, and headings are all unchanged.
+// raw + sanitize are included here too, else big docs would show raw HTML as
+// escaped text.
 const rehypePluginsNoHighlightWithMermaid: PluggableList = [
-  rehypeSourceLine,
   rehypeMermaidPretag,
+  rehypeRaw,
+  [rehypeSanitize, sanitizeSchema],
+  rehypeSourceLine,
   ...rehypePluginsNoHighlight,
   rehypeSourceLineApply,
 ];
