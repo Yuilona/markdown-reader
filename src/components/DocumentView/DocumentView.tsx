@@ -10,6 +10,7 @@ import { rehypeSourceLine, rehypeSourceLineApply, readSourceLine } from '../../l
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import { sanitizeSchema } from '../../lib/sanitizeSchema';
+import { urlTransform } from '../../lib/urlTransform';
 import { splitFrontmatter, frontmatterLineOffset } from '../../lib/parseFrontmatter';
 import { dirname, normalizePath, joinUnder } from '../../lib/pathUtils';
 import { handleLinkClick, useLinkRouter } from '../../lib/linkRouter';
@@ -499,6 +500,7 @@ export function DocumentView({
         remarkPlugins={remarkPlugins}
         rehypePlugins={activeRehypePlugins}
         components={components}
+        urlTransform={urlTransform}
       >
         {body}
       </Markdown>

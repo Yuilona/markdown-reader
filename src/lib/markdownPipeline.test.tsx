@@ -9,6 +9,7 @@ import rehypeSanitize from 'rehype-sanitize';
 
 import { sanitizeSchema } from './sanitizeSchema';
 import { rehypeMermaidPretag } from './rehypeMermaidPretag';
+import { urlTransform } from './urlTransform';
 
 // The raw-HTML + sanitize core of the DocumentView rehype chain (task
 // 06-10-raw-html-render). We test through react-markdown (the real consumer)
@@ -141,5 +142,32 @@ describe('mermaid pre-tagging survives sanitize (data-mermaid-source whitelist)'
     // The adjacent raw HTML <div> still renders.
     expect(c.querySelector('div')).not.toBeNull();
     expect(c.textContent).toContain('hello');
+  });
+});
+
+describe('absolute local image paths (urlTransform passthrough + sanitize, task 06-10-absolute-paths)', () => {
+  function renderMdAbs(md: string): HTMLElement {
+    const { container } = render(
+      <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={RAW_SANITIZE} urlTransform={urlTransform}>
+        {md}
+      </Markdown>,
+    );
+    return container;
+  }
+
+  it('keeps an absolute Windows img src through raw + sanitize when urlTransform allows it', () => {
+    const img = renderMdAbs('<img src="E:/photos/y.png" alt="abs">').querySelector('img');
+    expect(img).not.toBeNull();
+    expect(img!.getAttribute('src')).toBe('E:/photos/y.png');
+  });
+
+  it('keeps a UNC img src', () => {
+    const img = renderMdAbs('<img src="\\\\server\\share\\z.png" alt="unc">').querySelector('img');
+    expect(img!.getAttribute('src')).toBe('\\\\server\\share\\z.png');
+  });
+
+  it('still blanks javascript: in img src even with the custom urlTransform', () => {
+    const src = renderMdAbs('<img src="javascript:alert(1)" alt="x">').querySelector('img')?.getAttribute('src') ?? '';
+    expect(src.toLowerCase().startsWith('javascript:')).toBe(false);
   });
 });

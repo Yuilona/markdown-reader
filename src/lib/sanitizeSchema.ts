@@ -21,10 +21,13 @@ import { defaultSchema } from 'rehype-sanitize';
  *     pre-tagger sets `data-mermaid-source` BEFORE sanitize runs; whitelist it
  *     so mermaid detection survives — see design.md D2).
  *
- * `defaultSchema.protocols` (href/src limited to http/https/mailto + relative)
- * is preserved via the spread, giving a second layer under react-markdown's
- * `defaultUrlTransform` + our `resolveImageSrc`. Tauri's local-image URLs are
- * `http://asset.localhost/...` (http), so they survive sanitize.
+ * `defaultSchema.protocols` keeps its guards for most attributes, but the
+ * `href` / `src` protocol checks are DROPPED (task 06-10-absolute-paths) so
+ * absolute drive-letter paths (`C:/…`, `E:\…`) survive — `E:` would otherwise
+ * be read as a URL scheme and blanked. This does not weaken protection against
+ * `javascript:` / `data:`: those are still blanked at render by our
+ * `urlTransform`, and img/a are gated by `resolveImageSrc` / `linkRouter`.
+ * Tauri's local-image URLs (`http://asset.localhost/...`) also pass.
  */
 export const sanitizeSchema: typeof defaultSchema = {
   ...defaultSchema,
@@ -63,4 +66,10 @@ export const sanitizeSchema: typeof defaultSchema = {
     // global is added (no className/style/on*).
     '*': [...(defaultSchema.attributes?.['*'] ?? []), 'title'],
   },
+  // Drop only the href/src protocol guards so absolute drive-letter paths
+  // survive sanitize (see header). Keep every other protocol-checked attribute
+  // (cite, longDesc, …) guarded.
+  protocols: Object.fromEntries(
+    Object.entries(defaultSchema.protocols ?? {}).filter(([key]) => key !== 'href' && key !== 'src'),
+  ),
 };
