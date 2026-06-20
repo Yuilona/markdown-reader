@@ -111,20 +111,42 @@ button {
  */
 
 /*
- * KaTeX display-math overflow + spacing (task 06-20-math-render-fidelity).
+ * KaTeX display-math overflow + `\tag{}` equation-number positioning
+ * (task 06-20-math-render-fidelity).
  *
- * katex.min.css gives `.katex-display` no horizontal overflow handling, so a
- * formula wider than the column bleeds off the right edge — and an `\tag{}`
- * equation number, positioned at the formula's right edge, ends up overlapping
- * the formula body (seen on eqs (19)/(20) in samples/HiPER.md). `overflow-x:
- * auto` lets wide equations scroll inside their own viewport, keeping the tag
- * at the true right edge. The padding reserves room so the scrollbar and any
- * descenders aren't clipped; the larger vertical margins give consecutive
- * display equations more breathing room.
+ * THE BUG: KaTeX positions an equation number as `.tag { position:absolute;
+ * right:0 }` inside `.katex-display > .katex > .katex-html`, which is a
+ * `display:block` box — so its width is the COLUMN width, not the formula's
+ * true width. A wide formula uses `white-space:nowrap` and overflows that box,
+ * while the tag stays pinned at the column's right edge (`right:0`), landing on
+ * top of the overflowing formula (seen on eqs (16)/(19)/(20) in HiPER.md).
+ * `overflow-x:auto` alone does NOT fix this: the block stays column-width, so
+ * the tag still overlaps.
  *
- * Same specificity as katex.min.css's own `.katex-display` (0,1,0); this rule
- * loads after it, so it wins. A user's data/user.css (injected last) can still
- * override it.
+ * THE FIX has two parts, verified by measuring real Blink layout (the engine
+ * WebView2 uses) — `.tag` left edge vs the formula body's right edge:
+ *
+ * 1. `width: max-content` + `min-width: 100%` on `.katex` — branch on whether
+ *    the formula fits the column:
+ *      - NARROW (fits): `min-width:100%` wins → `.katex` stays COLUMN width,
+ *        identical to stock KaTeX: formula centered, tag in the right margin.
+ *        (`max-content` alone would shrink the box onto the formula and pull
+ *        the tag on top of the last glyph — `min-width` prevents that.)
+ *      - WIDE (overflows): `max-content` wins → `.katex` is as wide as the
+ *        formula, exceeds the column, auto margins collapse to 0 (left-aligned,
+ *        no left-clip), and `overflow-x:auto` on `.katex-display` lets it
+ *        scroll.
+ * 2. `padding-right: 3em` on a tagged `.katex-html` — RESERVES horizontal room
+ *    for the number. KaTeX pins `.tag` at `right:0` of `.katex-html`; without
+ *    reserved space the tag's right edge coincides with the formula's right
+ *    edge and the ~2em-wide number is drawn back ON TOP of the formula's end
+ *    (the wide-equation overlap the user saw). The padding pushes the tag into
+ *    its own gutter. Scoped via `:has(> .tag)` so the MANY untagged display
+ *    equations keep their exact center (no spurious left shift). `:has()` is
+ *    supported by WebView2 / current WebKitGTK / WKWebView.
+ *
+ * Same specificity as katex.min.css's own selectors; these rules load after
+ * it, so they win. A user's data/user.css (injected last) can still override.
  */
 .katex-display {
   overflow-x: auto;
@@ -133,4 +155,16 @@ button {
   padding-bottom: 0.5em;
   margin-top: 1.2em;
   margin-bottom: 1.2em;
+}
+.katex-display > .katex {
+  display: block;
+  width: -webkit-max-content;
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  margin-left: auto;
+  margin-right: auto;
+}
+.katex-display > .katex > .katex-html:has(> .tag) {
+  padding-right: 3em;
 }
