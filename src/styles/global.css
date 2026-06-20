@@ -109,3 +109,28 @@ button {
  * rule in case any future code re-introduces the class — harmless when
  * the selector matches nothing.
  */
+
+/*
+ * KaTeX display-math overflow + spacing (task 06-20-math-render-fidelity).
+ *
+ * katex.min.css gives `.katex-display` no horizontal overflow handling, so a
+ * formula wider than the column bleeds off the right edge — and an `\tag{}`
+ * equation number, positioned at the formula's right edge, ends up overlapping
+ * the formula body (seen on eqs (19)/(20) in samples/HiPER.md). `overflow-x:
+ * auto` lets wide equations scroll inside their own viewport, keeping the tag
+ * at the true right edge. The padding reserves room so the scrollbar and any
+ * descenders aren't clipped; the larger vertical margins give consecutive
+ * display equations more breathing room.
+ *
+ * Same specificity as katex.min.css's own `.katex-display` (0,1,0); this rule
+ * loads after it, so it wins. A user's data/user.css (injected last) can still
+ * override it.
+ */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-top: 0.25em;
+  padding-bottom: 0.5em;
+  margin-top: 1.2em;
+  margin-bottom: 1.2em;
+}

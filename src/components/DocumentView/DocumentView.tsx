@@ -11,6 +11,7 @@ import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import { sanitizeSchema } from '../../lib/sanitizeSchema';
 import { urlTransform } from '../../lib/urlTransform';
+import { escapeCurrencyMath } from '../../lib/escapeCurrencyMath';
 import { splitFrontmatter, frontmatterLineOffset } from '../../lib/parseFrontmatter';
 import { dirname, normalizePath, joinUnder } from '../../lib/pathUtils';
 import { handleLinkClick, useLinkRouter } from '../../lib/linkRouter';
@@ -494,6 +495,12 @@ export function DocumentView({
       ? rehypePluginsNoHighlightWithMermaid
       : rehypePluginsWithMermaid;
 
+  // Escape currency `$` (e.g. `$0.94`) so remark-math doesn't swallow prose
+  // between two money signs into an inline formula. Line-count safe (only
+  // inserts `\`), so the rehypeSourceLine stamps still match the editor
+  // buffer. See escapeCurrencyMath for the full rationale.
+  const renderBody = useMemo(() => escapeCurrencyMath(body), [body]);
+
   const markdownEl = useMemo(
     () => (
       <Markdown
@@ -502,10 +509,10 @@ export function DocumentView({
         components={components}
         urlTransform={urlTransform}
       >
-        {body}
+        {renderBody}
       </Markdown>
     ),
-    [body, components, activeRehypePlugins],
+    [renderBody, components, activeRehypePlugins],
   );
 
   return (
