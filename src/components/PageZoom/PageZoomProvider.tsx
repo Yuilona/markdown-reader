@@ -79,6 +79,17 @@ function applyZoom(zoom: number): void {
   // and WebView2. Setting it as a string with a unit-less percent works
   // across versions. Setting it to `''` would reset to default (1.0).
   document.body.style.zoom = `${zoom}%`;
+  // Expose the zoom FACTOR (unitless, e.g. 1.5 for 150%) as a root CSS
+  // variable so position:fixed overlays sized in `vh` can counter-scale.
+  // `body { zoom }` scales the ENTIRE body subtree at paint time —
+  // including fixed children and their `vh`-based lengths — so a panel
+  // with `max-height: calc(100vh - …)` renders taller than the real
+  // window at zoom > 100% and spills off-screen (the TOC overflow bug).
+  // The TOC divides its viewport budget by this factor to stay
+  // window-fitted at any zoom (see Toc.module.css `.sidebar`). Set on the
+  // root element so it's inherited everywhere and is itself immune to the
+  // body zoom.
+  document.documentElement.style.setProperty('--page-zoom', String(zoom / 100));
 }
 
 interface PageZoomProviderProps {
@@ -137,6 +148,7 @@ export function PageZoomProvider({ children }: PageZoomProviderProps) {
   useEffect(() => {
     return () => {
       document.body.style.zoom = '';
+      document.documentElement.style.removeProperty('--page-zoom');
     };
   }, []);
 

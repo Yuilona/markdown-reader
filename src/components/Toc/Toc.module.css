@@ -21,10 +21,17 @@
   top: 44px; /* 32px titlebar + 12px gap */
   left: 12px;
   width: 260px;
-  /* Sit just under the titlebar and tall enough to scroll most TOCs.
-   * Cap by viewport height with a small bottom gap so it doesn't kiss
-   * the window edge. */
-  max-height: calc(100vh - 64px);
+  /* Cap the panel to the VISIBLE window so a long TOC never spills past
+   * the bottom edge (and so its list actually scrolls). The budget first
+   * subtracts the chrome the panel must clear — 44px top (32px titlebar +
+   * 12px gap) + 24px statusbar + 12px bottom gap = 80px — THEN divides
+   * 100vh by the page-zoom factor. PageZoom applies `body { zoom }`, which
+   * scales this fixed panel and its vh-based height at paint time; without
+   * the `/ var(--page-zoom)` the rendered height exceeds the real window at
+   * zoom > 100% and the tail goes off-screen, unreachable. Empirically
+   * verified to stay window-fitted + scrollable at zoom 75–200%. The
+   * fallback `1` covers the brief window before PageZoom sets the var. */
+  max-height: calc(100vh / var(--page-zoom, 1) - 80px);
   display: flex;
   flex-direction: column;
   background: var(--bg-elevated);
@@ -92,6 +99,13 @@
   list-style: none;
   overflow-y: auto;
   flex: 1 1 auto;
+  /* Flex items default to min-height:auto and refuse to shrink below their
+   * content height, which can defeat overflow-y:auto inside a height-capped
+   * flex column. Pin to 0 so the list always yields to the sidebar's
+   * max-height and scrolls. (Defensive: with today's single-level flex the
+   * sidebar's max-height already constrains it — verified — but this guards
+   * a future intermediate flex wrapper from reintroducing a no-scroll clip.) */
+  min-height: 0;
   /* Hide the visual scrollbar but keep wheel/touch scrolling functional.
    * The user explicitly asked for no scrollbar — it looked unharmonious
    * against the rounded panel. The contents are still fully reachable
