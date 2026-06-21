@@ -90,6 +90,14 @@ function applyZoom(zoom: number): void {
   // root element so it's inherited everywhere and is itself immune to the
   // body zoom.
   document.documentElement.style.setProperty('--page-zoom', String(zoom / 100));
+  // Inverse factor for overlays that want to OPT OUT of page zoom entirely
+  // by counter-scaling (`zoom: var(--page-zoom-inv)`) back to net 1 — e.g.
+  // the Lightbox, a dedicated full-screen viewer with its own pan/zoom that
+  // should fit the REAL window regardless of page zoom. Counter-zooming to
+  // net 1 makes every interior measurement (inset:0, 95vw/vh, innerWidth-
+  // based sizing, getBoundingClientRect-based centering) behave exactly as
+  // at 100% — the tested, correct case.
+  document.documentElement.style.setProperty('--page-zoom-inv', String(100 / zoom));
 }
 
 interface PageZoomProviderProps {
@@ -149,6 +157,7 @@ export function PageZoomProvider({ children }: PageZoomProviderProps) {
     return () => {
       document.body.style.zoom = '';
       document.documentElement.style.removeProperty('--page-zoom');
+      document.documentElement.style.removeProperty('--page-zoom-inv');
     };
   }, []);
 

@@ -145,7 +145,19 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
       ref={menuRef}
       className={styles.menu}
       role="menu"
-      style={{ left: pos.x, top: pos.y }}
+      // `pos` is in clientX/Y coordinates, which under PageZoom's
+      // `body { zoom }` are the VISUAL (zoomed) frame — but the CSS `left`/
+      // `top` we write here are re-multiplied by the zoom at paint time.
+      // Without the `/ var(--page-zoom)` the menu lands at clientX*zoom and
+      // drifts far from the cursor (empirically: at 150% a click at 525
+      // painted to 788). Dividing by the zoom factor cancels the re-scale
+      // so the menu opens exactly under the cursor at any zoom. The clamp
+      // effect needs no change — it works entirely in the same visual frame
+      // (clientX + getBoundingClientRect.width vs window.innerWidth).
+      style={{
+        left: `calc(${pos.x}px / var(--page-zoom, 1))`,
+        top: `calc(${pos.y}px / var(--page-zoom, 1))`,
+      }}
       onContextMenu={(e) => {
         // Suppress the browser's default contextmenu on the menu
         // itself — a right-click on a menu item should not open

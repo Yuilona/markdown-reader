@@ -14,6 +14,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Opt the whole viewer OUT of PageZoom's `body { zoom }`. body-zoom scales
+   * the entire body subtree — including this fixed overlay, its inset:0 box,
+   * the 95vw/95vh image, the innerWidth-based SVG sizing, and the
+   * getBoundingClientRect-based panzoom centering — so at zoom > 100% the
+   * backdrop overflows the window, the close button is pushed off the right
+   * edge, and content spills past the viewport. Counter-scaling by 1/zoom
+   * brings the viewer to NET zoom 1, so every interior measurement behaves
+   * exactly as at 100% (the tested, correct case) and the lightbox fits the
+   * REAL window at any page zoom. The user still pans/zooms inside via
+   * panzoom. (--page-zoom-inv is set by PageZoomProvider.) */
+  zoom: var(--page-zoom-inv, 1);
   /* Anywhere on the backdrop (i.e. outside the content) closes — make
    * that affordance explicit via cursor (R5.5). */
   cursor: zoom-out;
