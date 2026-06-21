@@ -165,7 +165,7 @@ export function Titlebar({ docPath }: TitlebarProps = {}) {
           aria-label="Minimize"
           title="最小化"
         >
-          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+          <svg width="17" height="17" viewBox="0 0 10 10" aria-hidden="true">
             <rect x="0" y="4.5" width="10" height="1" fill="currentColor" />
           </svg>
         </button>
@@ -185,7 +185,7 @@ export function Titlebar({ docPath }: TitlebarProps = {}) {
           aria-label="Close"
           title="关闭"
         >
-          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+          <svg width="17" height="17" viewBox="0 0 10 10" aria-hidden="true">
             <path
               d="M 0,0 L 10,10 M 10,0 L 0,10"
               stroke="currentColor"
@@ -211,7 +211,7 @@ function EditModeIcon({ isEdit }: { isEdit: boolean }) {
   if (isEdit) {
     // Eye glyph: outlined eye with a center dot. "Click to view-only".
     return (
-      <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+      <svg width="19" height="19" viewBox="0 0 16 16" aria-hidden="true">
         <path
           fill="none"
           stroke="currentColor"
@@ -224,7 +224,7 @@ function EditModeIcon({ isEdit }: { isEdit: boolean }) {
   }
   // Pencil glyph: diagonal line + tip triangle. "Click to edit".
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+    <svg width="19" height="19" viewBox="0 0 16 16" aria-hidden="true">
       <g fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z" />
         <path d="M10.5 3.5l2 2" />
@@ -236,7 +236,7 @@ function EditModeIcon({ isEdit }: { isEdit: boolean }) {
 /** Maximize glyph: a single square (window is not maximized). */
 function MaximizeIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+    <svg width="17" height="17" viewBox="0 0 10 10" aria-hidden="true">
       <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1" />
     </svg>
   );
@@ -248,7 +248,7 @@ function MaximizeIcon() {
  *  button's hover background). */
 function RestoreIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+    <svg width="17" height="17" viewBox="0 0 10 10" aria-hidden="true">
       <rect x="0.5" y="2.5" width="6" height="6" fill="none" stroke="currentColor" strokeWidth="1" />
       <path d="M2.5 2.5 V0.5 H8.5 V6.5 H6.5" fill="none" stroke="currentColor" strokeWidth="1" />
     </svg>
@@ -258,7 +258,7 @@ function RestoreIcon() {
 /** Magnifier glyph with a minus (zoom out) or plus (zoom in) inside. */
 function ZoomIcon({ kind }: { kind: 'in' | 'out' }) {
   return (
-    <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true">
+    <svg width="19" height="19" viewBox="0 0 16 16" aria-hidden="true">
       <circle cx="6.5" cy="6.5" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
       <line
         x1="10"
@@ -303,7 +303,7 @@ function ZoomIcon({ kind }: { kind: 'in' | 'out' }) {
 function ThemeIcon({ mode }: { mode: ThemeMode }) {
   if (mode === 'light') {
     return (
-      <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true">
         {/* Sun: solid circle + 8 rays. */}
         <circle cx="8" cy="8" r="3" fill="currentColor" />
         <g stroke="currentColor" strokeWidth="1.2" strokeLinecap="round">
@@ -321,7 +321,7 @@ function ThemeIcon({ mode }: { mode: ThemeMode }) {
   }
   if (mode === 'dark') {
     return (
-      <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true">
         {/* Crescent moon — single path so currentColor fills cleanly. */}
         <path
           fill="currentColor"
@@ -332,7 +332,7 @@ function ThemeIcon({ mode }: { mode: ThemeMode }) {
   }
   // 'system' — half-shaded disc.
   return (
-    <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true">
+    <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true">
       <circle
         cx="8"
         cy="8"

@@ -13,15 +13,22 @@
 
 .bar {
   flex: 0 0 auto;
-  height: 24px;
+  height: 36px;
   display: flex;
   align-items: center;
   padding: 0 12px;
+  /* App chrome must NOT scale with page zoom (zoom is for the document, not
+   * the status bar / its controls). PageZoom applies `body { zoom }` to the
+   * whole subtree; counter-scale by 1/zoom so this bar stays its native
+   * size at any page-zoom level. The `height:100%` shell keeps it pinned to
+   * the bottom. Mirrors Titlebar `.titlebar`. Verified constant-size +
+   * correctly positioned at zoom 100–200%. */
+  zoom: var(--page-zoom-inv, 1);
   background: var(--bg-surface);
   border-top: 1px solid var(--border-muted);
   color: var(--fg-muted);
   font-family: var(--font-stack-code);
-  font-size: 11px;
+  font-size: 13px;
   user-select: none;
   -webkit-user-select: none;
   overflow: hidden;

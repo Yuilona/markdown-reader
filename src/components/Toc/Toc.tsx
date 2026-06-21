@@ -221,7 +221,7 @@ export function Toc({
         data-no-search
         data-print-hide
       >
-        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true">
           {/* Three-bar TOC glyph. */}
           <g fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
             <line x1="3" y1="4.5" x2="13" y2="4.5" />
@@ -305,7 +305,7 @@ function TocItem({ heading, isCurrent, onClick }: TocItemProps) {
       <button
         type="button"
         className={className}
-        style={{ paddingLeft: `${8 + indent}px` }}
+        style={{ paddingLeft: `${10 + indent}px` }}
         onClick={() => onClick(heading.id)}
         title={heading.text}
       >

@@ -19,7 +19,7 @@
 
 .bar {
   position: fixed;
-  top: 44px; /* 32 titlebar + 12 gap, matches Toc.sidebar */
+  top: 60px; /* 48 titlebar + 12 gap, matches Toc.sidebar */
   right: 12px;
   width: 380px;
   display: flex;

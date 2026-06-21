@@ -11,7 +11,7 @@
  */
 
 .titlebar {
-  height: 32px;
+  height: 48px;
   display: flex;
   align-items: stretch;
   justify-content: flex-end;
@@ -21,6 +21,13 @@
   -webkit-user-select: none;
   border-bottom: 1px solid var(--titlebar-border);
   flex: 0 0 auto;
+  /* App chrome must NOT scale with page zoom — zoom is for the document
+   * content, not the titlebar/its buttons. PageZoom applies `body { zoom }`
+   * (which scales the whole subtree); counter-scale by 1/zoom so this bar
+   * renders at its native size at any page-zoom level. The `height:100%`
+   * shell keeps it pinned to the top regardless. Mirrors StatusBar `.bar`.
+   * Verified constant-size + correctly positioned at zoom 100–200%. */
+  zoom: var(--page-zoom-inv, 1);
   /* Anchor for the absolutely-positioned .title below. */
   position: relative;
   /* Width of the right-side control cluster. Used as symmetric padding on
@@ -48,9 +55,9 @@
   position: absolute;
   inset: 0;
   padding: 0 var(--controls-w);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 400;
-  line-height: 32px;
+  line-height: 48px;
   color: var(--titlebar-fg);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -74,10 +81,10 @@
   z-index: 1;
 }
 
-/* Win11 caption-button standard size: 46x32 px. */
+/* Caption buttons fill the (slightly taller than Win11-stock) 40px bar. */
 .btn {
-  width: 46px;
-  height: 32px;
+  width: 54px;
+  height: 48px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -113,14 +120,14 @@
 }
 
 .zoomBtn {
-  width: 30px;
+  width: 36px;
 }
 
 .zoomLevel {
   width: auto;
-  min-width: 42px;
-  padding: 0 6px;
-  font-size: 11px;
+  min-width: 50px;
+  padding: 0 8px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   color: var(--titlebar-fg);
 }
@@ -129,7 +136,7 @@
  * caption buttons so it visually reads as "secondary" without breaking
  * the Win11 spacing rhythm. */
 .themeBtn {
-  width: 38px;
+  width: 44px;
 }
 
 /* v1.0 PR-A: edit-mode toggle (R-EDIT-3.2). Same narrow width as the
@@ -138,7 +145,7 @@
  * accent highlight underneath the glyph (via aria-pressed) so the
  * user has a clear visual signal "edit mode is on right now". */
 .editBtn {
-  width: 38px;
+  width: 44px;
   position: relative;
 }
 

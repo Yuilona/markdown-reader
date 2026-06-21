@@ -18,20 +18,19 @@
 
 .sidebar {
   position: fixed;
-  top: 44px; /* 32px titlebar + 12px gap */
+  top: 60px; /* 48px titlebar + 12px gap */
   left: 12px;
-  width: 260px;
-  /* Cap the panel to the VISIBLE window so a long TOC never spills past
-   * the bottom edge (and so its list actually scrolls). The budget first
-   * subtracts the chrome the panel must clear — 44px top (32px titlebar +
-   * 12px gap) + 24px statusbar + 12px bottom gap = 80px — THEN divides
-   * 100vh by the page-zoom factor. PageZoom applies `body { zoom }`, which
-   * scales this fixed panel and its vh-based height at paint time; without
-   * the `/ var(--page-zoom)` the rendered height exceeds the real window at
-   * zoom > 100% and the tail goes off-screen, unreachable. Empirically
-   * verified to stay window-fitted + scrollable at zoom 75–200%. The
-   * fallback `1` covers the brief window before PageZoom sets the var. */
-  max-height: calc(100vh / var(--page-zoom, 1) - 80px);
+  width: 290px;
+  /* The TOC is app chrome (navigation), not document content, so it must
+   * NOT scale with page zoom. PageZoom applies `body { zoom }` to the whole
+   * subtree; counter-scale by 1/zoom so the panel renders at its native size
+   * at any page-zoom level (mirrors Titlebar/StatusBar). At net zoom 1 the
+   * vh budget is simple: cap to the visible window minus the chrome it must
+   * clear — 60px top (48 titlebar + 12 gap) + 36 statusbar + 12 bottom gap =
+   * 108px. Verified constant-size + window-fitted + scrollable at zoom
+   * 75–200%. (--page-zoom-inv is set by PageZoomProvider.) */
+  zoom: var(--page-zoom-inv, 1);
+  max-height: calc(100vh - 108px);
   display: flex;
   flex-direction: column;
   background: var(--bg-elevated);
@@ -39,7 +38,7 @@
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   z-index: 1000;
-  font-size: 13px;
+  font-size: 15px;
   color: var(--fg-default);
   overflow: hidden;
   transition: top 0.2s ease, max-height 0.2s ease;
@@ -56,22 +55,22 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 8px 8px 14px;
+  padding: 10px 10px 10px 16px;
   border-bottom: 1px solid var(--border-muted);
   flex: 0 0 auto;
 }
 
 .title {
   font-weight: 600;
-  font-size: 12px;
+  font-size: 14px;
   letter-spacing: 0.02em;
   color: var(--fg-muted);
   text-transform: uppercase;
 }
 
 .closeBtn {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -130,7 +129,7 @@
   background: transparent;
   border: none;
   border-left: 2px solid transparent;
-  padding: 4px 10px 4px 8px;
+  padding: 6px 12px 6px 10px;
   color: var(--fg-muted);
   font: inherit;
   cursor: pointer;
@@ -177,10 +176,12 @@
 
 .openToggle {
   position: fixed;
-  top: 44px;
+  top: 60px;
   left: 12px;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
+  /* Chrome button — keep native size under page zoom (mirrors .sidebar). */
+  zoom: var(--page-zoom-inv, 1);
   display: inline-flex;
   align-items: center;
   justify-content: center;
