@@ -54,20 +54,53 @@ export function useWindowStatePersistence(): void {
     let cancelled = false;
     const unlistens: Array<() => void> = [];
 
+    // Last NON-maximized geometry. We persist THIS as width/height/x/y so
+    // the "restore from maximize" rect is the user's real floating size.
+    // BUG (fixed): previously saveCurrent wrote `innerSize()`/`outerPosition()`
+    // unconditionally — when the window was maximized those return the
+    // MAXIMIZED rect, which then got saved as the "size". On the next launch
+    // we `setSize(thatRect)` then `maximize()`, so the OS restore rect became
+    // the full screen and un-maximizing didn't visibly shrink the window.
+    // Now we only refresh this from the live window while it is NOT maximized.
+    let lastNormal: { x: number; y: number; width: number; height: number } | null = null;
+
     /** Snapshot the live window state and write it to disk. */
     const saveCurrent = async (): Promise<void> => {
       try {
-        const [size, position, maximized] = await Promise.all([
-          win.innerSize(),
-          win.outerPosition(),
-          win.isMaximized(),
-        ]);
+        const maximized = await win.isMaximized();
+        // Only refresh the saved geometry from the LIVE window when it is
+        // NOT maximized — otherwise innerSize()/outerPosition() return the
+        // maximized rect and would poison the restore size (see the
+        // `lastNormal` note above).
+        if (!maximized) {
+          const [size, position] = await Promise.all([
+            win.innerSize(),
+            win.outerPosition(),
+          ]);
+          lastNormal = {
+            x: position.x,
+            y: position.y,
+            width: size.width,
+            height: size.height,
+          };
+        }
+        // Fallback only if we have never observed a non-maximized geometry
+        // (e.g. the very first session launched maximized with no prior
+        // saved size): save the live rect so we persist *something*.
+        let geom = lastNormal;
+        if (!geom) {
+          const [size, position] = await Promise.all([
+            win.innerSize(),
+            win.outerPosition(),
+          ]);
+          geom = { x: position.x, y: position.y, width: size.width, height: size.height };
+        }
         const state: WindowState = {
           version: 1,
-          x: position.x,
-          y: position.y,
-          width: size.width,
-          height: size.height,
+          x: geom.x,
+          y: geom.y,
+          width: geom.width,
+          height: geom.height,
           maximized,
         };
         await saveWindowState(state);
@@ -101,6 +134,11 @@ export function useWindowStatePersistence(): void {
           ]);
           if (cancelled) return;
           const fixed = clampToVisibleBounds(saved, monitors, primary);
+          // Seed the non-maximized geometry from the restored state so a
+          // save while still maximized (before any floating resize) keeps
+          // the correct restore size rather than falling back to the live
+          // (maximized) rect.
+          lastNormal = { x: fixed.x, y: fixed.y, width: fixed.width, height: fixed.height };
           if (fixed.maximized) {
             // Set the inner geometry FIRST so the "restore from
             // maximize" rect the OS remembers points at the user's
