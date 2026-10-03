@@ -389,6 +389,18 @@
 :root[data-theme='dark'] .markdown-body .markdown-alert-important { --alert-accent: #b69acd; --alert-bg: rgba(182,154,205,0.11); --alert-border: rgba(182,154,205,0.24); }
 :root[data-theme='dark'] .markdown-body .markdown-alert-warning { --alert-accent: #d6a15e; --alert-bg: rgba(214,161,94,0.12);  --alert-border: rgba(214,161,94,0.25); }
 :root[data-theme='dark'] .markdown-body .markdown-alert-caution { --alert-accent: #d88678; --alert-bg: rgba(216,134,120,0.11); --alert-border: rgba(216,134,120,0.24); }
+/* github-markdown-css paints each alert type with higher-specificity rules
+ * (`.markdown-body .markdown-alert.markdown-alert-note` 0,3,0 for the bar,
+ * `… .markdown-alert-title` 0,4,0 for the title), which out-ranked the rules
+ * above: the bar stayed GitHub blue and the title took --fgColor-accent (the
+ * orange accent) — the callout palette never showed. `:is(...)` matches that
+ * specificity, and user.css loads last, so these win. */
+.markdown-body .markdown-alert:is(.markdown-alert-note, .markdown-alert-tip, .markdown-alert-important, .markdown-alert-warning, .markdown-alert-caution) {
+  border-left-color: var(--alert-accent, var(--accent));
+}
+.markdown-body .markdown-alert:is(.markdown-alert-note, .markdown-alert-tip, .markdown-alert-important, .markdown-alert-warning, .markdown-alert-caution) .markdown-alert-title {
+  color: var(--alert-accent, var(--accent));
+}
 
 /* =====================================================================
  * Themed scrollbars (Claude). WebView2 is Chromium, so ::-webkit-scrollbar
