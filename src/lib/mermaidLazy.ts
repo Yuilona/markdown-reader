@@ -28,73 +28,77 @@ export type MermaidTheme = 'default' | 'dark' | 'forest' | 'neutral';
 type MermaidModule = typeof import('mermaid');
 
 let mermaidPromise: Promise<MermaidModule> | null = null;
-/** The theme currently configured inside the Mermaid instance. Tracked
- *  here so `setMermaidTheme` knows which cache slice to invalidate. */
-let currentTheme: MermaidTheme = 'default';
+/** The theme most recently REQUESTED via `setMermaidTheme`. Updated
+ *  synchronously so the latest request always wins (see setMermaidTheme). */
+let wantedTheme: MermaidTheme = 'default';
+/** The theme actually configured inside the loaded Mermaid instance. Tracked
+ *  so `setMermaidTheme` knows which cache slice to invalidate. */
+let appliedTheme: MermaidTheme = 'default';
+
+function initialize(mod: MermaidModule, theme: MermaidTheme): void {
+  mod.default.initialize({
+    // We render manually (`mermaid.render()`), never letting Mermaid
+    // walk the DOM and replace `.mermaid` blocks itself.
+    startOnLoad: false,
+    theme,
+    // Avoid arbitrary HTML execution from user-authored documents.
+    securityLevel: 'strict',
+    // Per-block error UI is OUR responsibility (R4.5); silence
+    // Mermaid's built-in red error rectangle so it doesn't appear
+    // alongside our own fallback.
+    suppressErrorRendering: true,
+  });
+  appliedTheme = theme;
+}
 
 export function loadMermaid(): Promise<MermaidModule> {
   if (mermaidPromise) return mermaidPromise;
 
   mermaidPromise = import('mermaid').then((mod) => {
-    mod.default.initialize({
-      // We render manually (`mermaid.render()`), never letting Mermaid
-      // walk the DOM and replace `.mermaid` blocks itself.
-      startOnLoad: false,
-      // PR-6 swaps this dynamically via `setMermaidTheme`. The initial
-      // value matches the default light theme; the ThemeProvider's mount
-      // effect calls `setMermaidTheme` if the user prefers dark.
-      theme: currentTheme,
-      // Avoid arbitrary HTML execution from user-authored documents.
-      securityLevel: 'strict',
-      // Per-block error UI is OUR responsibility (R4.5); silence
-      // Mermaid's built-in red error rectangle so it doesn't appear
-      // alongside our own fallback.
-      suppressErrorRendering: true,
-    });
+    // Initialize with whatever was requested most recently — a theme
+    // switch that happened while the chunk was downloading is honored.
+    initialize(mod, wantedTheme);
     return mod;
   });
 
   return mermaidPromise;
 }
 
-/** Return the currently-configured Mermaid theme name. Used by the
- *  `<Mermaid>` cache lookup so its key matches the live palette. */
+/** Return the theme currently configured inside the Mermaid instance.
+ *  `<Mermaid>` checks it after a render so it never caches an SVG under a
+ *  theme key it wasn't actually painted in. */
 export function getMermaidTheme(): MermaidTheme {
-  return currentTheme;
+  return appliedTheme;
 }
 
 /**
  * Switch the active Mermaid theme (R4.3, R4.4).
  *
- * Idempotent: no-op when the requested theme equals the current one,
- * which keeps the React provider free to call this unconditionally on
- * every effective-theme change.
+ * Latest request wins. BUG (fixed): this used to compare against the theme
+ * applied so far and bail on equality, then await the (~4 MB) module load
+ * before applying. At startup ThemeProvider first requests the OS-derived
+ * theme (e.g. 'dark'), then the persisted setting (e.g. 'default') a moment
+ * later — the second call saw "already default" and returned, then the
+ * first call finished and applied 'dark', so a light-themed app painted
+ * dark diagrams. Now the request is recorded synchronously and a call whose
+ * request was superseded while it awaited does nothing.
  *
- * Re-initializes mermaid via `mermaid.initialize({ theme })` — this is
- * the official supported way to change palette mid-session. THEN invokes
- * `clearCacheForTheme(oldTheme)` so SVGs cached under the previous
- * theme key are dropped; any remount with the same `source` triggers a
- * fresh render via `mermaid.render` and produces colors in the new
- * theme. The current theme's cached SVGs (if any from a previous toggle
- * cycle) are preserved, which gives a free fast-path on light↔dark
- * thrashing.
+ * Not loaded yet → just record the request; `loadMermaid()` initializes
+ * with it. So a dark-mode start no longer downloads Mermaid for documents
+ * without diagrams.
+ *
+ * On an actual switch: re-initialize (the supported way to change palette
+ * mid-session), then `clearCacheForTheme(oldTheme)` so remounts re-render in
+ * the new palette. The new theme's cached SVGs from an earlier toggle cycle
+ * are kept — a free fast-path on light↔dark thrashing.
  */
 export async function setMermaidTheme(theme: MermaidTheme): Promise<void> {
-  if (theme === currentTheme) return;
-  const oldTheme = currentTheme;
-  // Ensure the mermaid module is loaded before we can re-initialize.
-  // If no Mermaid block has been mounted yet, we just remember the
-  // selection here and `loadMermaid()` will use it on first load.
-  const mod = await loadMermaid();
-  mod.default.initialize({
-    startOnLoad: false,
-    theme,
-    securityLevel: 'strict',
-    suppressErrorRendering: true,
-  });
-  currentTheme = theme;
-  // Drop the previous theme's cache so any remount re-renders in the
-  // new palette. (Cache entries for the NEW theme, if any from a
-  // prior toggle cycle, are intentionally retained.)
+  wantedTheme = theme;
+  if (!mermaidPromise) return;
+  const mod = await mermaidPromise;
+  // Superseded by a newer request while we awaited — let that call apply.
+  if (wantedTheme !== theme || appliedTheme === theme) return;
+  const oldTheme = appliedTheme;
+  initialize(mod, theme);
   clearCacheForTheme(oldTheme);
 }

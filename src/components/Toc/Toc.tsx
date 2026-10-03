@@ -20,6 +20,9 @@ interface TocProps {
    *  We shift the TOC down by ~48px when search is open so its header
    *  isn't hidden behind the SearchBar overlay. */
   searchOpen: boolean;
+  /** Reports whether the expanded panel is on screen (visible AND the doc
+   *  has headings), so DocumentView can keep the article clear of it. */
+  onPanelShownChange?: (shown: boolean) => void;
 }
 
 /**
@@ -65,6 +68,7 @@ export function Toc({
   onClose,
   onOpen,
   searchOpen,
+  onPanelShownChange,
 }: TocProps) {
   const headings = useTocHeadings(articleRef, versionKey);
   const [currentId, setCurrentId] = useState<string | null>(null);
@@ -198,6 +202,12 @@ export function Toc({
   // the headings array unnecessarily. The list itself is small but
   // the render produces fresh DOM each pass.
   const items = useMemo(() => headings, [headings]);
+
+  const panelShown = visible && items.length > 0;
+  useEffect(() => {
+    onPanelShownChange?.(panelShown);
+  }, [panelShown, onPanelShownChange]);
+  useEffect(() => () => onPanelShownChange?.(false), [onPanelShownChange]);
 
   // No headings → render nothing at all (no panel, no toggle). The
   // empty case is meaningless and a stray toggle button is just noise.

@@ -59,6 +59,16 @@ export const sanitizeSchema: typeof defaultSchema = {
     col: [...(defaultSchema.attributes?.col ?? []), 'span'],
     colgroup: [...(defaultSchema.attributes?.colgroup ?? []), 'span'],
     details: [...(defaultSchema.attributes?.details ?? []), 'open'],
+    // GitHub alerts (`> [!NOTE]`): remark-github-blockquote-alert emits these
+    // classes, which the stock schema strips (alerts then render as a plain
+    // "NOTE" paragraph). Allow ONLY the exact alert class names. The octicon
+    // <svg> it also emits stays stripped (no svg from documents) and is
+    // re-added post-sanitize by `rehypeAlertIcons`.
+    div: [
+      ...(defaultSchema.attributes?.div ?? []),
+      ['className', 'markdown-alert', /^markdown-alert-(note|tip|important|warning|caution)$/],
+    ],
+    p: [...(defaultSchema.attributes?.p ?? []), ['className', 'markdown-alert-title']],
     // Mermaid pre-tagger writes data-mermaid-source on <pre> before sanitize;
     // keep it so the <pre> → <Mermaid> routing in DocumentView still fires.
     pre: [...(defaultSchema.attributes?.pre ?? []), 'dataMermaidSource'],

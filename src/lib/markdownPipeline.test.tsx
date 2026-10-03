@@ -4,10 +4,12 @@ import { render } from '@testing-library/react';
 import Markdown from 'react-markdown';
 import type { PluggableList } from 'unified';
 import remarkGfm from 'remark-gfm';
+import { remarkAlert } from 'remark-github-blockquote-alert';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 
 import { sanitizeSchema } from './sanitizeSchema';
+import { rehypeAlertIcons } from './rehypeAlertIcons';
 import { rehypeMermaidPretag } from './rehypeMermaidPretag';
 import { urlTransform } from './urlTransform';
 
@@ -169,5 +171,52 @@ describe('absolute local image paths (urlTransform passthrough + sanitize, task 
   it('still blanks javascript: in img src even with the custom urlTransform', () => {
     const src = renderMdAbs('<img src="javascript:alert(1)" alt="x">').querySelector('img')?.getAttribute('src') ?? '';
     expect(src.toLowerCase().startsWith('javascript:')).toBe(false);
+  });
+});
+
+describe('remark-generated nodes survive sanitize (alerts + footnotes)', () => {
+  // The same remark/rehype ordering DocumentView uses around sanitize.
+  function renderFull(md: string): HTMLElement {
+    const { container } = render(
+      <Markdown
+        remarkPlugins={[remarkGfm, remarkAlert]}
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeAlertIcons]}
+        remarkRehypeOptions={{ clobberPrefix: '' }}
+      >
+        {md}
+      </Markdown>,
+    );
+    return container;
+  }
+
+  it('keeps GitHub alert classes and re-adds the octicon', () => {
+    const c = renderFull('> [!WARNING]\n> careful');
+    const alert = c.querySelector('div.markdown-alert.markdown-alert-warning');
+    expect(alert).not.toBeNull();
+    const title = alert!.querySelector('p.markdown-alert-title');
+    expect(title?.textContent).toBe('WARNING');
+    expect(title?.querySelector('svg.octicon path')?.getAttribute('d')).toBeTruthy();
+  });
+
+  it('allows only the exact alert class names from raw HTML', () => {
+    const c = renderFull('<div class="markdown-alert evil-class">x</div>');
+    const div = c.querySelector('div');
+    expect(div?.className).toBe('markdown-alert');
+  });
+
+  it('never passes an svg written in the document itself', () => {
+    const c = renderFull('<svg><path d="M0 0"/></svg>');
+    expect(c.querySelector('svg')).toBeNull();
+  });
+
+  it('footnote links resolve to their targets via the user-content- fallback', () => {
+    const c = renderFull('text[^1]\n\n[^1]: note');
+    const ref = c.querySelector('a[data-footnote-ref]');
+    const back = c.querySelector('a[data-footnote-backref]');
+    const refTarget = ref!.getAttribute('href')!.slice(1);
+    const backTarget = back!.getAttribute('href')!.slice(1);
+    // ids carry exactly ONE sanitize prefix; scrollToAnchor tries `user-content-${id}`.
+    expect(c.querySelector(`[id="user-content-${refTarget}"]`)?.tagName).toBe('LI');
+    expect(c.querySelector(`[id="user-content-${backTarget}"]`)?.tagName).toBe('A');
   });
 });

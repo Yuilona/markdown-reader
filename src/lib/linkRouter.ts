@@ -154,8 +154,14 @@ function scrollToAnchor(id: string): void {
   // `getElementById` doesn't accept percent-decoded ids if the slug
   // generator stored them otherwise — try the raw, then a lowercased
   // variant (rehype-slug's typical normalization).
+  // Ids from the document (footnotes, raw-HTML `id=`) carry sanitize's
+  // `user-content-` clobber prefix while hrefs don't (`#fn-1` →
+  // `user-content-fn-1`) — the same fallback GitHub's own JS applies.
+  // Heading ids come from rehype-slug AFTER sanitize, so they're unprefixed.
   const el =
-    document.getElementById(id) ?? document.getElementById(id.toLowerCase());
+    document.getElementById(id) ??
+    document.getElementById(id.toLowerCase()) ??
+    document.getElementById(`user-content-${id}`);
   if (!el) return;
   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }

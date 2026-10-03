@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { loadMermaid, setMermaidTheme } from '../../lib/mermaidLazy';
+import { getMermaidTheme, loadMermaid, setMermaidTheme } from '../../lib/mermaidLazy';
 import { getCached, putCached } from '../../lib/mermaidCache';
 import * as logger from '../../lib/logger';
 import { useTheme } from '../ThemeProvider/useTheme';
@@ -155,7 +155,13 @@ export function Mermaid({ source, onRequestFullscreen, sourceLine }: MermaidProp
         // Populate the cache even if the component unmounted mid-render.
         // The SVG is valid output; a subsequent remount of the same source
         // (e.g. after navigating away and back) deserves the cache hit.
-        putCached(source, mermaidTheme, svg);
+        // But only under the theme it was really painted in: a theme switch
+        // landing mid-render re-initializes Mermaid, and caching that SVG
+        // under the old key would pin the wrong palette (the effect re-runs
+        // for the new theme anyway).
+        if (getMermaidTheme() === mermaidTheme) {
+          putCached(source, mermaidTheme, svg);
+        }
         if (cancelled) return;
         setState({ kind: 'rendered', svg });
       } catch (err) {

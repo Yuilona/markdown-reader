@@ -10,6 +10,7 @@ import { rehypeSourceLine, rehypeSourceLineApply, readSourceLine } from '../../l
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import { sanitizeSchema } from '../../lib/sanitizeSchema';
+import { rehypeAlertIcons } from '../../lib/rehypeAlertIcons';
 import { urlTransform } from '../../lib/urlTransform';
 import { escapeCurrencyMath } from '../../lib/escapeCurrencyMath';
 import { splitFrontmatter, frontmatterLineOffset } from '../../lib/parseFrontmatter';
@@ -137,6 +138,9 @@ const rehypePluginsWithMermaid: PluggableList = [
   //    THEY add (heading id, KaTeX classes/MathML, Shiki language-*/inline
   //    style, data-source-line).
   [rehypeSanitize, sanitizeSchema],
+  // 3b. Re-add the GitHub-alert octicons sanitize just stripped (trusted,
+  //     generated markup — see rehypeAlertIcons.ts).
+  rehypeAlertIcons,
   // 4. First-pass source-line stamping — AFTER sanitize so the data-source-line
   //    attribute survives (sanitize drops data-* by default).
   rehypeSourceLine,
@@ -157,10 +161,20 @@ const rehypePluginsNoHighlightWithMermaid: PluggableList = [
   rehypeMermaidPretag,
   rehypeRaw,
   [rehypeSanitize, sanitizeSchema],
+  rehypeAlertIcons,
   rehypeSourceLine,
   ...rehypePluginsNoHighlight,
   rehypeSourceLineApply,
 ];
+
+/** Footnote ids: remark-rehype prefixes them with `user-content-` AND
+ * sanitize's clobber guard prefixes every id again, so ids became
+ * `user-content-user-content-fn-1` while hrefs stayed `#user-content-fn-1` —
+ * footnote links and backrefs went nowhere. Drop remark-rehype's prefix so
+ * sanitize applies the single `user-content-` (GitHub's exact output);
+ * `scrollToAnchor` resolves `#fn-1` → `user-content-fn-1`, as GitHub's JS
+ * does. Module constant so the memoized markdownEl stays stable. */
+const REMARK_REHYPE_OPTIONS = { clobberPrefix: '' };
 
 /** Char-count threshold above which Shiki is dropped on first paint (R3).
  * ~2M chars (~2MB of ASCII); tuned to avoid multi-second main-thread freezes
@@ -213,6 +227,9 @@ export function DocumentView({
   // outside the article body.
   const articleRef = useRef<HTMLElement | null>(null);
   useScrollMemory(scrollRef, doc.path);
+  // Whether the expanded TOC panel is on screen — reported by <Toc>, which
+  // alone knows if the doc has headings. Drives `.articleBesideToc`.
+  const [tocPanelShown, setTocPanelShown] = useState(false);
 
   // v1.0 PR-B (R-EDIT-4): editor → preview scroll sync. Only active in
   // edit mode (editText provided) AND when settings.editor.scrollSync is
@@ -248,7 +265,7 @@ export function DocumentView({
   // watcher reloads (text changes → new body → new key). Mirrors the
   // `tocVersionKey` used below for the TOC / SearchBar.
   const syncVersionKey = useMemo(
-    () => `${doc.path} ${body}`,
+    () => `${doc.path}\u0000${body}`,
     [doc.path, body],
   );
   useEditorScrollSync({
@@ -508,6 +525,7 @@ export function DocumentView({
         rehypePlugins={activeRehypePlugins}
         components={components}
         urlTransform={urlTransform}
+        remarkRehypeOptions={REMARK_REHYPE_OPTIONS}
       >
         {renderBody}
       </Markdown>
@@ -520,7 +538,9 @@ export function DocumentView({
       <div ref={scrollRef} className={styles.scrollArea}>
         <article
           ref={articleRef}
-          className={`${styles.article} markdown-body`}
+          className={`${styles.article} ${
+            tocPanelShown && !editTextProvided ? styles.articleBesideToc : ''
+          } markdown-body`}
           onClick={handlePreviewClick}
         >
           <Frontmatter raw={frontmatterRaw} />
@@ -544,6 +564,7 @@ export function DocumentView({
           onClose={onToggleToc}
           onOpen={onToggleToc}
           searchOpen={searchOpen}
+          onPanelShownChange={setTocPanelShown}
         />
       )}
       <SearchBar

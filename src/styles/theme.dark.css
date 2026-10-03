@@ -148,6 +148,18 @@
  * but it's cheap insurance and the equivalent `light` rule uses the same
  * weight so they stay in lockstep.
  */
+/* Fenced code never takes inline-code chrome. `data/user.css` is seeded once
+ * and never updated, so installs seeded before the theme fix still carry a
+ * dark inline-code rule (`:root[data-theme='dark'] .markdown-body code`,
+ * specificity 0,3,1) that out-ranks the theme's own `pre code` reset and
+ * paints a tinted band behind every code line. This (0,3,2) guard wins
+ * regardless of stylesheet order, so those installs heal without touching
+ * the user's file. */
+:root[data-theme='dark'] .markdown-body pre code,
+:root[data-theme='dark'] .markdown-body pre tt {
+  background: none;
+}
+
 :root[data-theme='dark'] .markdown-body pre code span {
   color: var(--shiki-dark) !important;
   font-style: var(--shiki-dark-font-style, inherit);

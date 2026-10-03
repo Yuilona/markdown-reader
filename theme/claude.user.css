@@ -279,8 +279,11 @@
   border-radius: 0.4rem;
   padding: 1px 0.3rem;
 }
-:root[data-theme='dark'] .markdown-body code,
-:root[data-theme='dark'] .markdown-body tt {
+/* Inline only: `:not(pre) >` keeps this (higher-specificity) dark rule from
+ * beating the `pre code` reset below, which painted a tinted band behind
+ * every fenced-code line in dark mode. */
+:root[data-theme='dark'] .markdown-body :not(pre) > code,
+:root[data-theme='dark'] .markdown-body :not(pre) > tt {
   background-color: rgba(194, 192, 182, 0.05);
 }
 /* Fenced code: let the container token (--bg-code-block) + Shiki spans

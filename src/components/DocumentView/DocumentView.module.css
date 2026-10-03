@@ -33,6 +33,23 @@
   box-sizing: border-box;
 }
 
+/* Keep the article clear of the expanded TOC panel. The panel is chrome: it
+ * is counter-scaled to a constant 12px + 290px of SCREEN space at any page
+ * zoom, while the article lives inside `body { zoom }` — so at 150% the
+ * centered column's left margin is far smaller than the panel and the TOC
+ * covered headings and text. Convert the panel footprint (+16px gap = 318px)
+ * into document px via --page-zoom-inv and use it as a floor on the
+ * centering margin: wide windows stay perfectly centered, narrower ones
+ * shift right just enough. Below 900px wide there's no room for both, so the
+ * panel keeps overlaying (with its peel-off shadow) rather than crushing the
+ * column. Same specificity as `.scrollArea .article`, later → wins. */
+@media (min-width: 900px) {
+  .scrollArea .articleBesideToc {
+    margin-left: max(calc(318px * var(--page-zoom-inv, 1)), calc((100% - 820px) / 2));
+    margin-right: auto;
+  }
+}
+
 /* Narrower viewport: shrink horizontal padding so the body stays
  *  comfortably readable instead of producing a thin column. */
 @media (max-width: 720px) {
