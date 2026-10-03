@@ -13,6 +13,8 @@ import styles from './StatusBar.module.css';
  *       read mode, with a document open:
  *         K 字 · 约 M 分钟
  *     (The bar used to sit empty in read mode unless a link was hovered.)
+ *     Both are prefixed with the document's encoding when it isn't plain
+ *     UTF-8 (e.g. `GBK ·`), so a legacy-encoded file is never a surprise.
  *
  * Hidden during print via `data-print-hide` (R11.3).
  *
@@ -22,9 +24,11 @@ import styles from './StatusBar.module.css';
 interface StatusBarProps {
   /** A document is open — gates the read-mode document stats. */
   hasDocument?: boolean;
+  /** Encoding label (`codecLabel`), or null for plain UTF-8. */
+  encodingLabel?: string | null;
 }
 
-export function StatusBar({ hasDocument = false }: StatusBarProps = {}) {
+export function StatusBar({ hasDocument = false, encodingLabel = null }: StatusBarProps = {}) {
   const { text } = useStatusBar();
   const { mode, cursor, wordCount, readingMinutes, dirty } = useEditMode();
   const showEditorCell = mode === 'edit';
@@ -37,6 +41,12 @@ export function StatusBar({ hasDocument = false }: StatusBarProps = {}) {
       </span>
       {showEditorCell && (
         <span className={styles.editorCell} aria-label="编辑器状态">
+          {encodingLabel && (
+            <>
+              <span className={styles.cell}>{encodingLabel}</span>
+              <span className={styles.cellSep}>·</span>
+            </>
+          )}
           {cursor && (
             <>
               <span className={styles.cell}>
@@ -56,6 +66,12 @@ export function StatusBar({ hasDocument = false }: StatusBarProps = {}) {
       )}
       {showDocStats && (
         <span className={styles.editorCell} aria-label="文档统计">
+          {encodingLabel && (
+            <>
+              <span className={styles.cell}>{encodingLabel}</span>
+              <span className={styles.cellSep}>·</span>
+            </>
+          )}
           <span className={styles.cell}>{wordCount.toLocaleString()} 字</span>
           <span className={styles.cellSep}>·</span>
           <span className={styles.cell}>约 {readingMinutes} 分钟</span>

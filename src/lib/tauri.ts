@@ -1,7 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import { readTextFile, writeTextFile, rename, remove } from '@tauri-apps/plugin-fs';
 
 import { normalizePath, isMarkdownPath } from './pathUtils';
 import { pushRecent } from './recentFiles';
@@ -60,6 +59,44 @@ export const getDataDir = (): Promise<string> => invoke<string>('get_data_dir');
 export interface LoadedDocument {
   path: string | null;
   text: string;
+  /** The file's text encoding, detected on read and preserved on save.
+   *  Absent for an unnamed buffer (saved as UTF-8). */
+  codec?: TextCodec;
+  /** Some bytes didn't decode under the detected encoding (shown as
+   *  U+FFFD). Saving would make those replacements permanent. */
+  malformed?: boolean;
+}
+
+/** How a document's bytes map to text (mirrors Rust `text_codec::TextCodec`). */
+export interface TextCodec {
+  /** WHATWG encoding name: "UTF-8", "GBK", "Big5", "Shift_JIS", "UTF-16LE", … */
+  encoding: string;
+  /** File starts with a byte-order mark (kept on save). */
+  bom: boolean;
+}
+
+export const UTF8_CODEC: TextCodec = { encoding: 'UTF-8', bom: false };
+
+/** Short status-bar label for a codec, or null for plain UTF-8 (the
+ *  unremarkable default needs no label). */
+export function codecLabel(codec: TextCodec | undefined): string | null {
+  if (!codec || (codec.encoding === 'UTF-8' && !codec.bom)) return null;
+  return codec.bom && codec.encoding === 'UTF-8' ? 'UTF-8 BOM' : codec.encoding;
+}
+
+/** Result of a document write (mirrors Rust `text_codec::WriteOutcome`). */
+export interface WriteOutcome {
+  /** The codec actually written. */
+  codec: TextCodec;
+  /** The document's encoding couldn't represent the text; UTF-8 was
+   *  written instead (never lose characters). */
+  fellBackToUtf8: boolean;
+}
+
+interface DecodedText {
+  text: string;
+  codec: TextCodec;
+  malformed: boolean;
 }
 
 /** Options for `loadDocument`. */
@@ -90,13 +127,17 @@ export async function loadDocument(
   }
   const normalized = normalizePath(path);
   try {
-    const text = await readTextFile(normalized);
+    // Rust side detects the encoding (BOM / UTF-8 / chardetng guess, e.g.
+    // GBK) and strips any BOM — the fs plugin's readTextFile is UTF-8 only.
+    const { text, codec, malformed } = await invoke<DecodedText>('read_document', {
+      path: normalized,
+    });
     if (!options.skipRecent) {
       // Fire-and-forget the recent-list update. A persistence failure must
       // never block the document open.
       void pushRecent(normalized);
     }
-    return { path: normalized, text };
+    return { path: normalized, text, codec, malformed };
   } catch (err) {
     // PR-8: console mirror + rolling log file. The toast for "file
     // read failed" (R12.5) is emitted at the caller layer (App.tsx
@@ -109,7 +150,8 @@ export async function loadDocument(
 /**
  * v1.0 (R-EDIT-5.1, PR-A): write the editor's buffer to disk at `path`.
  *
- * Thin wrapper around `writeTextFile` so EditModeProvider can stay
+ * Thin wrapper around the Rust `write_document` command (encoding-
+ * preserving, atomic — see `writeDocument`) so EditModeProvider can stay
  * Tauri-agnostic and we keep the "all FS I/O lives in tauri.ts" pattern
  * the v0.1 codebase already follows for reads (`loadDocument`).
  *
@@ -132,10 +174,14 @@ export async function loadDocument(
  * fires, so the dirty bit is false and the silent reload path is a
  * no-op for the user).
  */
-export async function saveDocument(path: string, text: string): Promise<void> {
+export async function saveDocument(
+  path: string,
+  text: string,
+  codec: TextCodec = UTF8_CODEC,
+): Promise<WriteOutcome> {
   const normalized = normalizePath(path);
   try {
-    await atomicWriteText(normalized, text);
+    return await writeDocument(normalized, text, codec);
   } catch (err) {
     logger.warn('failed to save file:', normalized, err);
     throw err;
@@ -143,41 +189,29 @@ export async function saveDocument(path: string, text: string): Promise<void> {
 }
 
 /**
- * Atomic text write (v1.1): write the full contents to a sibling
- * `<path>.tmp`, then `rename` it over the target. The rename is atomic on
- * the same volume (the tmp lives in the same directory), so a crash /
- * power loss mid-write leaves the ORIGINAL file intact instead of a
- * half-written, truncated document — the failure mode that a plain
- * `writeTextFile(path)` exposes.
- *
- * This mirrors the proven `persistJson.atomicWriteJson` pattern (used for
- * settings.json / recent.json), now applied to the user's own document
- * where data loss matters most.
- *
- * On failure we best-effort remove the orphaned `.tmp` so a failed save
- * doesn't litter the user's folder; the original is never touched because
- * we only rename AFTER a complete tmp write.
+ * Encode + atomically write a document on the Rust side
+ * (`text_codec::write_document`): the bytes go to a sibling `<path>.tmp`
+ * that is renamed over the target, so a crash / power loss mid-write
+ * leaves the ORIGINAL file intact (and a failed write removes the tmp).
+ * The text is written in `codec` — the encoding the file was read in —
+ * falling back to UTF-8 only if that encoding can't represent it.
  */
-async function atomicWriteText(absPath: string, text: string): Promise<void> {
-  const tmpPath = `${absPath}.tmp`;
-  try {
-    await writeTextFile(tmpPath, text);
-    await rename(tmpPath, absPath);
-  } catch (err) {
-    try {
-      await remove(tmpPath);
-    } catch {
-      // Orphaned tmp couldn't be removed (e.g. it was never created).
-      // Harmless — the original document is intact regardless.
-    }
-    throw err;
-  }
+function writeDocument(absPath: string, text: string, codec: TextCodec): Promise<WriteOutcome> {
+  return invoke<WriteOutcome>('write_document', { path: absPath, text, codec });
+}
+
+/** Result of a Save As: the new document, and whether its encoding had
+ *  to fall back to UTF-8 (see `WriteOutcome.fellBackToUtf8`). */
+export interface SaveAsResult {
+  doc: LoadedDocument;
+  fellBackToUtf8: boolean;
 }
 
 /**
  * v1.0 (R-EDIT-6.2/6.3, PR-B): Save As. Show the native save dialog,
- * force a `.md` extension when the user omits one, write the buffer, add
- * the new path to the recent list, and return a fresh LoadedDocument.
+ * force a `.md` extension when the user omits one, write the buffer in
+ * `codec` (the current document's encoding; UTF-8 for an unnamed buffer),
+ * add the new path to the recent list, and return a fresh LoadedDocument.
  *
  * Returns `null` when the user cancels the dialog. Rethrows on write
  * failure so the caller can show an error toast (parity with
@@ -186,7 +220,10 @@ async function atomicWriteText(absPath: string, text: string): Promise<void> {
  * Used by both the explicit Ctrl+Shift+S and the first Ctrl+S on an
  * unnamed (path === null) buffer.
  */
-export async function saveAsDocument(text: string): Promise<LoadedDocument | null> {
+export async function saveAsDocument(
+  text: string,
+  codec: TextCodec = UTF8_CODEC,
+): Promise<SaveAsResult | null> {
   const picked = await save({
     defaultPath: 'untitled.md',
     filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
@@ -197,8 +234,9 @@ export async function saveAsDocument(text: string): Promise<LoadedDocument | nul
   // Force a markdown extension when the user typed a bare name (R-EDIT-6.2).
   const target = /\.(md|markdown)$/i.test(picked) ? picked : `${picked}.md`;
   const normalized = normalizePath(target);
+  let outcome: WriteOutcome;
   try {
-    await atomicWriteText(normalized, text);
+    outcome = await writeDocument(normalized, text, codec);
   } catch (err) {
     logger.warn('failed to save-as file:', normalized, err);
     throw err;
@@ -206,7 +244,10 @@ export async function saveAsDocument(text: string): Promise<LoadedDocument | nul
   // A Save As IS a "user created/opened this file" event — bump recent
   // (R-EDIT-6.4), unlike the in-place saveDocument path.
   void pushRecent(normalized);
-  return { path: normalized, text };
+  return {
+    doc: { path: normalized, text, codec: outcome.codec },
+    fellBackToUtf8: outcome.fellBackToUtf8,
+  };
 }
 
 /**

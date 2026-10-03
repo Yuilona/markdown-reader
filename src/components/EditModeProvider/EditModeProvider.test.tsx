@@ -3,12 +3,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, act } from '@testing-library/react';
 import { useState } from 'react';
 
-import type { LoadedDocument } from '../../lib/tauri';
+import type { LoadedDocument, TextCodec } from '../../lib/tauri';
 
 // saveDocument is the disk write; we make it a DEFERRED promise per test so
 // we can interleave "user keeps typing during the save await".
 const { saveDocument } = vi.hoisted(() => ({ saveDocument: vi.fn() }));
 vi.mock('../../lib/tauri', () => ({ saveDocument }));
+const UTF8_OUTCOME = { codec: { encoding: 'UTF-8', bom: false }, fellBackToUtf8: false };
 vi.mock('../../lib/settingsStore', () => ({
   getSettings: vi.fn().mockResolvedValue({ editor: { defaultMode: 'read' } }),
 }));
@@ -35,9 +36,9 @@ function Harness({ initialDoc }: { initialDoc: LoadedDocument | null }) {
   const [doc, setDoc] = useState<LoadedDocument | null>(initialDoc);
   setDocExternally = setDoc;
   // onDocTextSync mirrors App.tsx: after a save, the parent refreshes the
-  // LoadedDocument to the just-written text (same path).
-  const onDocTextSync = (text: string) =>
-    setDoc((d) => (d ? { ...d, text } : d));
+  // LoadedDocument to the just-written text + codec (same path).
+  const onDocTextSync = (text: string, codec: TextCodec) =>
+    setDoc((d) => (d ? { ...d, text, codec } : d));
   return (
     <EditModeProvider doc={doc} onDocTextSync={onDocTextSync} onSaveAs={async () => null}>
       <Capture />
@@ -60,8 +61,8 @@ describe('EditModeProvider self-write race (PR-A guard)', () => {
   it('preserves text typed DURING a save (does not clobber with the echo)', async () => {
     let resolveSave!: () => void;
     saveDocument.mockImplementation(
-      () => new Promise<void>((res) => {
-        resolveSave = res;
+      () => new Promise((res) => {
+        resolveSave = () => res(UTF8_OUTCOME);
       }),
     );
 
@@ -89,11 +90,12 @@ describe('EditModeProvider self-write race (PR-A guard)', () => {
     });
 
     expect(ctx.bufferText).toBe('edited-more');
-    expect(saveDocument).toHaveBeenCalledWith('/a.md', 'edited');
+    // No codec on the doc → saveDocument's UTF-8 default applies.
+    expect(saveDocument).toHaveBeenCalledWith('/a.md', 'edited', undefined);
   });
 
   it('adopts a genuine external change (not a self-write) by resetting the buffer', async () => {
-    saveDocument.mockResolvedValue(undefined);
+    saveDocument.mockResolvedValue(UTF8_OUTCOME);
     render(<Harness initialDoc={{ path: '/a.md', text: 'old' }} />);
     await settle();
 
@@ -105,7 +107,7 @@ describe('EditModeProvider self-write race (PR-A guard)', () => {
   });
 
   it('resets the buffer when switching to a different file', async () => {
-    saveDocument.mockResolvedValue(undefined);
+    saveDocument.mockResolvedValue(UTF8_OUTCOME);
     render(<Harness initialDoc={{ path: '/a.md', text: 'aaa' }} />);
     await settle();
     act(() => ctx.setBufferText('aaa-edited'));

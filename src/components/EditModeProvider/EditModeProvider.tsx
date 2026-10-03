@@ -8,7 +8,12 @@ import {
   type ReactNode,
 } from 'react';
 
-import { saveDocument, type LoadedDocument } from '../../lib/tauri';
+import {
+  saveDocument,
+  type LoadedDocument,
+  type SaveAsResult,
+  type TextCodec,
+} from '../../lib/tauri';
 import * as logger from '../../lib/logger';
 import { DEFAULT_SETTINGS } from '../../lib/settings';
 import { getSettings } from '../../lib/settingsStore';
@@ -118,15 +123,17 @@ export { EditModeContext };
 interface EditModeProviderProps {
   /** The currently-loaded document. `null` when on EmptyState. */
   doc: LoadedDocument | null;
-  /** Called after a successful in-place save with the just-written text.
-   *  The parent uses this to refresh its LoadedDocument so doc.text
-   *  matches what's on disk. */
-  onDocTextSync: (text: string) => void;
+  /** Called after a successful in-place save with the just-written text
+   *  and the codec it was written in (UTF-8 if the document's encoding
+   *  couldn't represent it). The parent uses this to refresh its
+   *  LoadedDocument so doc.text / doc.codec match what's on disk. */
+  onDocTextSync: (text: string, codec: TextCodec) => void;
   /** v1.0 PR-B (R-EDIT-6): perform a Save As. The parent shows the save
    *  dialog, writes the file, swaps `doc` to the new path, and bumps the
-   *  recent list. Returns the new LoadedDocument on success, or `null`
-   *  when the user cancelled. Rethrows on a real write failure. */
-  onSaveAs: (text: string) => Promise<LoadedDocument | null>;
+   *  recent list. `codec` is the current document's encoding (kept for
+   *  the new file). Returns the result on success, or `null` when the
+   *  user cancelled. Rethrows on a real write failure. */
+  onSaveAs: (text: string, codec: TextCodec | undefined) => Promise<SaveAsResult | null>;
   children: ReactNode;
 }
 
@@ -237,6 +244,23 @@ export function EditModeProvider({
   // `silent: true` is used by the mode-switch auto-save path
   // (R-EDIT-5.2) so the user doesn't get a "已保存" toast every time
   // they toggle back to read mode.
+  // Post-save toast. A fallback to UTF-8 changes the file's encoding, so
+  // it is announced even on the silent (mode-switch) save path.
+  const notifySaved = useCallback(
+    (silent: boolean | undefined, fellBackToUtf8: boolean) => {
+      if (fellBackToUtf8) {
+        const original = doc?.codec?.encoding ?? '原编码';
+        toast.show(`已保存为 UTF-8：文中有 ${original} 无法表示的字符`, {
+          variant: 'info',
+          duration: 6000,
+        });
+      } else if (!silent) {
+        toast.show('已保存', { variant: 'success' });
+      }
+    },
+    [doc, toast],
+  );
+
   // Save As (R-EDIT-6.2/6.3): always prompts for a path via the parent's
   // onSaveAs. On success the parent swaps `doc` to the new path; the
   // resulting doc.text change flows back through the reset effect, where
@@ -247,12 +271,10 @@ export function EditModeProvider({
       if (!doc) return false;
       const textToWrite = bufferText;
       try {
-        const result = await onSaveAs(textToWrite);
+        const result = await onSaveAs(textToWrite, doc.codec);
         if (!result) return false; // User cancelled the dialog.
         justWroteTextRef.current = textToWrite;
-        if (!options.silent) {
-          toast.show('已保存', { variant: 'success' });
-        }
+        notifySaved(options.silent, result.fellBackToUtf8);
         return true;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -260,7 +282,7 @@ export function EditModeProvider({
         throw err;
       }
     },
-    [doc, bufferText, onSaveAs, toast],
+    [doc, bufferText, onSaveAs, toast, notifySaved],
   );
 
   const save = useCallback(
@@ -273,17 +295,16 @@ export function EditModeProvider({
       const textToWrite = bufferText;
       const path = doc.path;
       try {
-        await saveDocument(path, textToWrite);
+        const outcome = await saveDocument(path, textToWrite, doc.codec);
         // Mark this text as our self-write so the parent's resulting
         // doc.text change doesn't clobber any post-save typing the
         // user did during the await above. See the reset effect's
         // SELF-WRITE RACE GUARD comment.
         justWroteTextRef.current = textToWrite;
-        // Tell the parent: the new on-disk truth is `textToWrite`.
-        onDocTextSync(textToWrite);
-        if (!options.silent) {
-          toast.show('已保存', { variant: 'success' });
-        }
+        // Tell the parent: the new on-disk truth is `textToWrite`, in
+        // `outcome.codec` (the original encoding, or its UTF-8 fallback).
+        onDocTextSync(textToWrite, outcome.codec);
+        notifySaved(options.silent, outcome.fellBackToUtf8);
         return true;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -296,7 +317,7 @@ export function EditModeProvider({
         throw err;
       }
     },
-    [doc, bufferText, onDocTextSync, toast, saveAs],
+    [doc, bufferText, onDocTextSync, toast, saveAs, notifySaved],
   );
 
   // setMode with the dirty-aware silent-save logic for edit→read

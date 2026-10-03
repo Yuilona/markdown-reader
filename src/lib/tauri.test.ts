@@ -1,20 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock every Tauri surface tauri.ts (and its import graph) touches, so the
-// module loads in plain node and we can assert the atomic-write sequence.
-// `vi.hoisted` makes the mock fns available inside the hoisted vi.mock
-// factory (vi.mock is lifted above these declarations otherwise).
-const { writeTextFile, rename, remove, readTextFile, exists } = vi.hoisted(() => ({
-  writeTextFile: vi.fn(),
-  rename: vi.fn(),
-  remove: vi.fn(),
-  readTextFile: vi.fn(),
-  exists: vi.fn(),
-}));
-vi.mock('@tauri-apps/plugin-fs', () => ({ writeTextFile, rename, remove, readTextFile, exists }));
-vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn().mockResolvedValue('C:\\app\\data') }));
+// Document I/O goes through the Rust `read_document` / `write_document`
+// commands (encoding detection + atomic write live in
+// src-tauri/src/text_codec.rs, tested there with `cargo test`). Here we
+// check the frontend contract: arguments in, codec info passed through.
+const { invoke, pushRecent } = vi.hoisted(() => ({ invoke: vi.fn(), pushRecent: vi.fn() }));
+vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({}) }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn(), save: vi.fn() }));
+vi.mock('./recentFiles', () => ({ pushRecent }));
 vi.mock('./logger', () => ({
   warn: vi.fn(),
   info: vi.fn(),
@@ -22,57 +16,64 @@ vi.mock('./logger', () => ({
   default: { warn: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 
-import { saveDocument } from './tauri';
+import { codecLabel, loadDocument, saveDocument, UTF8_CODEC } from './tauri';
 
-describe('saveDocument atomic write (v1.1)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+const GBK = { encoding: 'GBK', bom: false };
+
+describe('loadDocument (encoding-aware read)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('reads via read_document and keeps the detected codec', async () => {
+    invoke.mockResolvedValue({ text: '# 中文', codec: GBK, malformed: false });
+
+    const doc = await loadDocument('C:\\docs\\gbk.md');
+
+    expect(invoke).toHaveBeenCalledWith('read_document', { path: 'C:\\docs\\gbk.md' });
+    expect(doc).toEqual({ path: 'C:\\docs\\gbk.md', text: '# 中文', codec: GBK, malformed: false });
+    expect(pushRecent).toHaveBeenCalledWith('C:\\docs\\gbk.md');
   });
 
-  it('writes a sibling .tmp first, then renames it over the target', async () => {
-    writeTextFile.mockResolvedValue(undefined);
-    rename.mockResolvedValue(undefined);
+  it('returns null (no throw) when the read fails, and skips non-markdown paths', async () => {
+    invoke.mockRejectedValue('no such file');
+    expect(await loadDocument('C:\\docs\\gone.md')).toBeNull();
+    expect(await loadDocument('C:\\docs\\x.exe')).toBeNull();
+    expect(invoke).toHaveBeenCalledTimes(1);
+  });
+});
 
-    await saveDocument('C:\\docs\\note.md', 'hello world');
+describe('saveDocument (encoding-preserving write)', () => {
+  beforeEach(() => vi.clearAllMocks());
 
-    expect(writeTextFile).toHaveBeenCalledTimes(1);
-    expect(rename).toHaveBeenCalledTimes(1);
+  it('writes in the document codec and returns the outcome', async () => {
+    const outcome = { codec: GBK, fellBackToUtf8: false };
+    invoke.mockResolvedValue(outcome);
 
-    const tmpArg = writeTextFile.mock.calls[0][0] as string;
-    const content = writeTextFile.mock.calls[0][1] as string;
-    const [renameFrom, renameTo] = rename.mock.calls[0] as [string, string];
-
-    expect(tmpArg).toMatch(/\.tmp$/);
-    expect(content).toBe('hello world');
-    expect(renameFrom).toBe(tmpArg);
-    expect(renameTo).toBe(tmpArg.replace(/\.tmp$/, ''));
-    // tmp write happens BEFORE the rename.
-    expect(writeTextFile.mock.invocationCallOrder[0]).toBeLessThan(
-      rename.mock.invocationCallOrder[0],
-    );
-    expect(remove).not.toHaveBeenCalled();
+    await expect(saveDocument('C:\\docs\\gbk.md', '新内容', GBK)).resolves.toEqual(outcome);
+    expect(invoke).toHaveBeenCalledWith('write_document', {
+      path: 'C:\\docs\\gbk.md',
+      text: '新内容',
+      codec: GBK,
+    });
   });
 
-  it('never renames over the original when the tmp write fails, and removes the tmp', async () => {
-    writeTextFile.mockRejectedValue(new Error('disk full'));
-    remove.mockResolvedValue(undefined);
+  it('defaults to UTF-8 when the document has no codec (unnamed buffer)', async () => {
+    invoke.mockResolvedValue({ codec: UTF8_CODEC, fellBackToUtf8: false });
+    await saveDocument('C:\\docs\\new.md', 'x');
+    expect(invoke.mock.calls[0][1]).toMatchObject({ codec: UTF8_CODEC });
+  });
 
+  it('propagates a write failure so the caller can show the error', async () => {
+    invoke.mockRejectedValue(new Error('disk full'));
     await expect(saveDocument('C:\\docs\\note.md', 'data')).rejects.toThrow('disk full');
-
-    // The original file is never touched because rename only runs after a
-    // complete tmp write.
-    expect(rename).not.toHaveBeenCalled();
-    // Orphaned tmp is cleaned up.
-    expect(remove).toHaveBeenCalledTimes(1);
-    expect(remove.mock.calls[0][0]).toMatch(/\.tmp$/);
   });
+});
 
-  it('propagates a rename failure (and tries to clean the tmp)', async () => {
-    writeTextFile.mockResolvedValue(undefined);
-    rename.mockRejectedValue(new Error('rename denied'));
-    remove.mockResolvedValue(undefined);
-
-    await expect(saveDocument('C:\\docs\\note.md', 'data')).rejects.toThrow('rename denied');
-    expect(remove).toHaveBeenCalledTimes(1);
+describe('codecLabel', () => {
+  it('labels only non-default encodings', () => {
+    expect(codecLabel(undefined)).toBeNull();
+    expect(codecLabel(UTF8_CODEC)).toBeNull();
+    expect(codecLabel({ encoding: 'UTF-8', bom: true })).toBe('UTF-8 BOM');
+    expect(codecLabel(GBK)).toBe('GBK');
+    expect(codecLabel({ encoding: 'UTF-16LE', bom: true })).toBe('UTF-16LE');
   });
 });

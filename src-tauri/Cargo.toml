@@ -28,3 +28,8 @@ serde_json = "1"
 # File watcher for R2.6 external auto-reload. Pinned to 6.x — the 7.x line
 # changed the debouncer story significantly and we don't need it.
 notify = "6"
+# Document encoding (text_codec.rs): Firefox's encoding detector + codecs, so
+# GBK / Big5 / Shift_JIS / UTF-16 markdown opens correctly and saves back
+# in its own encoding.
+chardetng = "0.1"
+encoding_rs = "0.8"

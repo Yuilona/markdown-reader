@@ -28,7 +28,14 @@ import {
   registerSecondInstanceListener,
   takeCliLaunchPath,
 } from './lib/singleInstance';
-import { loadDocument, saveAsDocument, type LoadedDocument } from './lib/tauri';
+import {
+  codecLabel,
+  loadDocument,
+  saveAsDocument,
+  type LoadedDocument,
+  type SaveAsResult,
+  type TextCodec,
+} from './lib/tauri';
 import { cleanupStaleTemp } from './lib/recentFiles';
 import { loadUserCss } from './lib/userCss';
 import { LinkRouterContext, type LinkRouterContextValue } from './lib/linkRouter';
@@ -166,8 +173,8 @@ function AppContent() {
    * authoritative — re-reading would be a wasted round-trip AND would
    * race with our own watcher event (which fires for our own writes).
    */
-  const handleDocTextSync = useCallback((text: string) => {
-    setDoc((prev) => (prev ? { ...prev, text } : prev));
+  const handleDocTextSync = useCallback((text: string, codec: TextCodec) => {
+    setDoc((prev) => (prev ? { ...prev, text, codec } : prev));
   }, []);
 
   /**
@@ -180,9 +187,9 @@ function AppContent() {
    * the provider can show the error toast.
    */
   const handleSaveAs = useCallback(
-    async (text: string): Promise<LoadedDocument | null> => {
-      const saved = await saveAsDocument(text);
-      if (saved) setDoc(saved);
+    async (text: string, codec: TextCodec | undefined): Promise<SaveAsResult | null> => {
+      const saved = await saveAsDocument(text, codec);
+      if (saved) setDoc(saved.doc);
       return saved;
     },
     [],
@@ -270,6 +277,20 @@ function AppContent() {
   useEffect(() => {
     if (!doc) setSearchOpen(false);
   }, [doc]);
+
+  // Some bytes didn't decode under the detected encoding (a wrong guess or
+  // a corrupt file) and show as �. Warn once per opened file — every open
+  // path (dialog, drop, recent, link, CLI) lands here — since saving would
+  // make those replacements permanent. Keyed on the path so a watcher
+  // reload or a save of the same file doesn't repeat it.
+  const malformedPath = doc?.malformed ? doc.path : null;
+  useEffect(() => {
+    if (!malformedPath) return;
+    toast.show('部分内容无法按检测到的编码解码，显示为 �；保存会让这些字符永久替换', {
+      variant: 'info',
+      duration: 8000,
+    });
+  }, [malformedPath, toast]);
 
   const handleCloseSearch = useCallback(() => setSearchOpen(false), []);
 
@@ -575,7 +596,7 @@ function AppBody(props: AppBodyProps) {
           </ErrorBoundary>
         </main>
       </LightboxProvider>
-      <StatusBar hasDocument={doc !== null} />
+      <StatusBar hasDocument={doc !== null} encodingLabel={codecLabel(doc?.codec)} />
     </div>
   );
 }

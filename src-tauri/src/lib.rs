@@ -1,5 +1,6 @@
 mod data_dir;
 mod file_watcher;
+mod text_codec;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -45,6 +46,24 @@ fn start_watching(
 #[tauri::command]
 fn stop_watching(state: State<'_, WatcherState>) -> Result<(), String> {
     file_watcher::stop_watching(&state)
+}
+
+/// Read a markdown document, detecting its text encoding (BOM, UTF-8, or a
+/// chardetng guess such as GBK). See `text_codec`.
+#[tauri::command]
+fn read_document(path: String) -> Result<text_codec::DecodedText, String> {
+    text_codec::read_document(std::path::Path::new(&path))
+}
+
+/// Atomically write a markdown document in `codec` (its original encoding),
+/// falling back to UTF-8 if that encoding can't represent the text.
+#[tauri::command]
+fn write_document(
+    path: String,
+    text: String,
+    codec: text_codec::TextCodec,
+) -> Result<text_codec::WriteOutcome, String> {
+    text_codec::write_document(std::path::Path::new(&path), &text, &codec)
 }
 
 /// Extract the first non-flag argument that looks like a markdown file path
@@ -117,6 +136,8 @@ pub fn run() {
             take_cli_launch_path,
             start_watching,
             stop_watching,
+            read_document,
+            write_document,
         ])
         .run(tauri::generate_context!());
 
