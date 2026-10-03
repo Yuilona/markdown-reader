@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import CodeMirror, {
   type ReactCodeMirrorRef,
   type ViewUpdate,
@@ -10,7 +10,7 @@ import type { Extension } from '@codemirror/state';
 
 import { useEditMode } from '../EditModeProvider/useEditMode';
 import { useTheme } from '../ThemeProvider/useTheme';
-import { getSettings } from '../../lib/settingsStore';
+import { useSettings } from '../../hooks/useSettings';
 import { DEFAULT_EDITOR_SETTINGS, type EditorSettings } from '../../lib/settings';
 import { themeExtension, settingsExtension, foldGutterExtension } from './editorExtensions';
 import { codeLanguages } from './codeLanguages';
@@ -69,22 +69,16 @@ function CodeMirrorEditor({ value, onChange }: CodeMirrorEditorProps) {
     return () => registerEditorJump(null);
   }, [registerEditorJump]);
 
-  // Editor sub-settings (lineWrap / lineNumbers / tabSize). Start from
-  // the defaults so the first paint is correct, then promote to the
-  // persisted values once settings.json resolves. The reconfigure is
-  // cheap and only fires once per mount.
-  const [editorSettings, setEditorSettings] = useState<EditorSettings>(
-    DEFAULT_EDITOR_SETTINGS,
+  // Editor sub-settings (lineWrap / lineNumbers / tabSize). Defaults for
+  // the first paint, then the persisted values — and live edits from the
+  // settings panel. Memoized on the three fields actually used, so an
+  // unrelated settings change (theme, zoom) doesn't reconfigure the editor.
+  const editor = useSettings()?.editor ?? DEFAULT_EDITOR_SETTINGS;
+  const { lineNumbers, lineWrap, tabSize } = editor;
+  const editorSettings = useMemo<EditorSettings>(
+    () => ({ ...DEFAULT_EDITOR_SETTINGS, lineNumbers, lineWrap, tabSize }),
+    [lineNumbers, lineWrap, tabSize],
   );
-  useEffect(() => {
-    let cancelled = false;
-    void getSettings().then((s) => {
-      if (!cancelled) setEditorSettings(s.editor);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Push cursor info up to EditModeProvider on every selectionSet /
   // docChange. `line` is 1-indexed (CM6 native); `col` we +1 for

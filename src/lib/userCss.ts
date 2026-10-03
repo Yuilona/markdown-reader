@@ -1,4 +1,4 @@
-import { exists, readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
+import { exists, readTextFile, remove, writeTextFile } from '@tauri-apps/plugin-fs';
 
 import { getDataDir } from './tauri';
 import { joinUnder } from './pathUtils';
@@ -107,11 +107,7 @@ export async function loadUserCss(): Promise<void> {
         break;
       case 'seed':
       case 'upgrade':
-        await writeTextFile(path, claudeTheme);
-        await writeTextFile(
-          sentinelPath,
-          `seeded ${new Date().toISOString()}\nfingerprint ${themeFingerprint(claudeTheme)}\n`,
-        );
+        await writeBundledTheme(path, sentinelPath);
         if (plan.kind === 'upgrade') {
           logger.info('upgraded untouched bundled theme in user.css to the current version');
         }
@@ -137,4 +133,68 @@ export async function loadUserCss(): Promise<void> {
     // break boot — surface it in the durable log on top of the console.
     logger.warn('failed to load/seed user.css:', err);
   }
+}
+
+/** Write the bundled theme to user.css, then the sentinel recording its
+ *  fingerprint (that order — see the write-order note above). */
+async function writeBundledTheme(path: string, sentinelPath: string): Promise<void> {
+  await writeTextFile(path, claudeTheme);
+  await writeTextFile(
+    sentinelPath,
+    `seeded ${new Date().toISOString()}\nfingerprint ${themeFingerprint(claudeTheme)}\n`,
+  );
+}
+
+// ---- Settings panel: theme-file status + actions -------------------------
+
+/** What `data/user.css` currently is:
+ *  - 'bundled' — the current built-in Claude theme (auto-upgrades);
+ *  - 'custom'  — user-edited / user-authored (never touched);
+ *  - 'none'    — absent: the plain default style. */
+export type UserCssStatus = 'bundled' | 'custom' | 'none';
+
+async function userCssPaths(): Promise<{ path: string; sentinelPath: string }> {
+  const dir = await getDataDir();
+  return { path: joinUnder(dir, 'user.css'), sentinelPath: joinUnder(dir, '.theme-seeded') };
+}
+
+export async function getUserCssStatus(): Promise<UserCssStatus> {
+  const { path } = await userCssPaths();
+  if (!(await exists(path))) return 'none';
+  const css = await readTextFile(path);
+  return themeFingerprint(css) === themeFingerprint(claudeTheme) ? 'bundled' : 'custom';
+}
+
+/** Replace the live `<style>` (or remove it for null) — no restart needed. */
+function applyUserCss(css: string | null): void {
+  let style = document.getElementById(STYLE_TAG_ID);
+  if (css === null) {
+    style?.remove();
+    return;
+  }
+  if (!style) {
+    style = document.createElement('style');
+    style.id = STYLE_TAG_ID;
+    document.head.appendChild(style);
+  }
+  style.textContent = css;
+}
+
+/** Overwrite user.css with the current built-in theme and apply it now.
+ *  Discards any custom edits — the caller confirms first. */
+export async function restoreBundledTheme(): Promise<void> {
+  const { path, sentinelPath } = await userCssPaths();
+  await writeBundledTheme(path, sentinelPath);
+  applyUserCss(claudeTheme);
+}
+
+/** Switch to the plain default style: delete user.css (the sentinel stays,
+ *  so it is not re-seeded on the next launch) and drop it from the page. */
+export async function disableUserCss(): Promise<void> {
+  const { path, sentinelPath } = await userCssPaths();
+  if (await exists(path)) await remove(path);
+  if (!(await exists(sentinelPath))) {
+    await writeTextFile(sentinelPath, `seeded ${new Date().toISOString()}\n`);
+  }
+  applyUserCss(null);
 }

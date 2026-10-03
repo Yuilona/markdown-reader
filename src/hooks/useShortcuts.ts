@@ -54,6 +54,8 @@ interface UseShortcutsOptions {
   /** Alt+← / Alt+→: back / forward through opened documents. */
   onNavigateBack?: () => void;
   onNavigateForward?: () => void;
+  /** Ctrl+, : open the settings panel. */
+  onOpenSettings?: () => void;
 }
 
 /** Test whether a KeyboardEvent originated inside CodeMirror 6's editor
@@ -152,6 +154,7 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
     onNewDocument,
     onNavigateBack,
     onNavigateForward,
+    onOpenSettings,
   } = options;
   const { mode, setMode } = useTheme();
   const { zoomIn, zoomOut, resetZoom } = usePageZoom();
@@ -304,6 +307,12 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
         resetZoom();
         return;
       }
+      // Ctrl+, opens the settings panel (the common desktop convention).
+      if (mod(e) && !e.shiftKey && !e.altKey && e.key === ',') {
+        e.preventDefault();
+        onOpenSettings?.();
+        return;
+      }
       // Alt+← / Alt+→: document history, like a browser. Inside the editor
       // CM6 owns these (Alt+← moves the cursor by syntax unit), so yield.
       if (
@@ -345,6 +354,7 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
     onNewDocument,
     onNavigateBack,
     onNavigateForward,
+    onOpenSettings,
     mode,
     setMode,
     zoomIn,

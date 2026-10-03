@@ -35,11 +35,11 @@
    * VIEWPORT (not just relative to "left edge → controls.left"). The
    * :has(.zoomGroup) rule widens it when the read-mode zoom trio is
    * present, keeping the center exact across modes. */
-  --controls-w: 220px;
+  --controls-w: 274px; /* + 54px settings gear */
 }
 
 .titlebar:has(.zoomGroup) {
-  --controls-w: 320px;
+  --controls-w: 374px;
 }
 
 /* Title cell spans the WHOLE titlebar (absolute, inset: 0) and centers its

@@ -18,6 +18,7 @@ import { EditModeProvider } from './components/EditModeProvider/EditModeProvider
 import { useEditMode } from './components/EditModeProvider/useEditMode';
 import { EditorSkeleton } from './components/Editor/EditorSkeleton';
 import { SplitView } from './components/SplitView/SplitView';
+import { SettingsPanel } from './components/SettingsPanel/SettingsPanel';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useDragDrop } from './hooks/useDragDrop';
 import { useFileWatcher } from './hooks/useFileWatcher';
@@ -49,7 +50,7 @@ import {
   type NavTarget,
 } from './lib/navHistory';
 import { basename } from './lib/pathUtils';
-import { getSettings, updateSettings } from './lib/settingsStore';
+import { getSettings, subscribeSettings, updateSettings } from './lib/settingsStore';
 import * as logger from './lib/logger';
 
 const DROP_ERROR_TEXT = '无法打开：仅支持 .md / .markdown 文件';
@@ -134,7 +135,9 @@ function AppContent() {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Initial settings load → promote tocVisible to persisted value via
-  // the shared settings store (PR-9 hotfix).
+  // the shared settings store (PR-9 hotfix), then follow later changes
+  // (the settings panel's "默认显示目录" toggle). Ctrl+\ persists through
+  // the same store, so its echo here is a no-op.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -142,8 +145,10 @@ function AppContent() {
       if (cancelled) return;
       setTocVisible(settings.showTocByDefault);
     })();
+    const unsubscribe = subscribeSettings((s) => setTocVisible(s.showTocByDefault));
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, []);
 
@@ -462,6 +467,10 @@ function AppBody(props: AppBodyProps) {
     },
     [guardedAction, setDoc, toast],
   );
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const handleOpenSettings = useCallback(() => setSettingsOpen(true), []);
+  const handleCloseSettings = useCallback(() => setSettingsOpen(false), []);
+
   const handleNavigateBack = useCallback(() => navigateTo(back), [navigateTo, back]);
   const handleNavigateForward = useCallback(() => navigateTo(forward), [navigateTo, forward]);
 
@@ -554,6 +563,7 @@ function AppBody(props: AppBodyProps) {
     onNewDocument: handleNewDocument,
     onNavigateBack: handleNavigateBack,
     onNavigateForward: handleNavigateForward,
+    onOpenSettings: handleOpenSettings,
   });
 
   // v1.0 PR-A: file watcher with conflict handling. The hook itself
@@ -655,6 +665,7 @@ function AppBody(props: AppBodyProps) {
         canGoForward={forward !== null}
         onNavigateBack={handleNavigateBack}
         onNavigateForward={handleNavigateForward}
+        onOpenSettings={handleOpenSettings}
       />
       <LightboxProvider>
         <main className="app-main">
@@ -707,6 +718,7 @@ function AppBody(props: AppBodyProps) {
         </main>
       </LightboxProvider>
       <StatusBar hasDocument={doc !== null} encodingLabel={codecLabel(doc?.codec)} />
+      <SettingsPanel open={settingsOpen} onClose={handleCloseSettings} />
     </div>
   );
 }

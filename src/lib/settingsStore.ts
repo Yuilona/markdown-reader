@@ -2,6 +2,7 @@ import {
   readSettings,
   writeSettings,
   DEFAULT_SETTINGS,
+  type EditorSettings,
   type Settings,
 } from './settings';
 import * as logger from './logger';
@@ -89,13 +90,47 @@ export function getSettings(): Promise<Settings> {
 export function updateSettings(
   partial: Partial<Omit<Settings, 'version'>>,
 ): Promise<Settings> {
+  return enqueueUpdate((current) => ({ ...current, ...partial, version: 1 }));
+}
+
+/**
+ * Merge `partial` into the nested `editor` object. Done inside the write
+ * queue (not by the caller spreading a possibly stale `editor`), so two
+ * quick toggles in the settings panel can't overwrite each other.
+ */
+export function updateEditorSettings(partial: Partial<EditorSettings>): Promise<Settings> {
+  return enqueueUpdate((current) => ({
+    ...current,
+    editor: { ...current.editor, ...partial },
+    version: 1,
+  }));
+}
+
+type SettingsListener = (settings: Settings) => void;
+const listeners = new Set<SettingsListener>();
+
+/**
+ * Be told about every settings change made through this store, so UI that
+ * reads settings at mount (scroll sync, editor gutter / wrap / indent,
+ * default TOC visibility) follows edits made in the settings panel without
+ * a restart. Returns the unsubscribe function.
+ */
+export function subscribeSettings(listener: SettingsListener): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function enqueueUpdate(apply: (current: Settings) => Settings): Promise<Settings> {
   let result: Settings = { ...DEFAULT_SETTINGS };
   writeQueue = writeQueue.then(async () => {
     const current = await getSettings();
-    const next: Settings = { ...current, ...partial, version: 1 };
+    const next = apply(current);
     // Promote the cache BEFORE attempting the write so any concurrent
     // `getSettings()` resolves to the merged value even mid-write.
     cachedPromise = Promise.resolve(next);
+    for (const listener of listeners) listener(next);
     try {
       await writeSettings(next);
     } catch (err) {

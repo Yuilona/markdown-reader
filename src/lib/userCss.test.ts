@@ -3,13 +3,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock the Tauri + theme surfaces loadUserCss touches so the module runs in
 // jsdom. `vi.hoisted` exposes the fns inside the hoisted vi.mock factories.
-const { exists, readTextFile, writeTextFile, getDataDir } = vi.hoisted(() => ({
+const { exists, readTextFile, writeTextFile, remove, getDataDir } = vi.hoisted(() => ({
   exists: vi.fn(),
   readTextFile: vi.fn(),
   writeTextFile: vi.fn(),
+  remove: vi.fn(),
   getDataDir: vi.fn(),
 }));
-vi.mock('@tauri-apps/plugin-fs', () => ({ exists, readTextFile, writeTextFile }));
+vi.mock('@tauri-apps/plugin-fs', () => ({ exists, readTextFile, writeTextFile, remove }));
 vi.mock('./tauri', () => ({ getDataDir }));
 vi.mock('./logger', () => ({ warn: vi.fn(), info: vi.fn(), error: vi.fn() }));
 // The `?raw` import of the bundled theme → a fixed sentinel string.
@@ -21,7 +22,13 @@ vi.mock('./themeFingerprint', async (importOriginal) => {
   return { ...mod, LEGACY_THEME_FINGERPRINTS: new Set([mod.themeFingerprint('LEGACY_THEME_CSS')]) };
 });
 
-import { loadUserCss, planUserCss } from './userCss';
+import {
+  disableUserCss,
+  getUserCssStatus,
+  loadUserCss,
+  planUserCss,
+  restoreBundledTheme,
+} from './userCss';
 import { themeFingerprint } from './themeFingerprint';
 
 const DATA_DIR = 'C:\\app\\data';
@@ -167,5 +174,42 @@ describe('loadUserCss — upgrade path I/O', () => {
     await loadUserCss();
 
     expect(writeTextFile.mock.calls[1][1]).toMatch(/^seeded .+\nfingerprint [0-9a-f]{14}\n$/);
+  });
+});
+
+describe('settings panel theme actions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getDataDir.mockResolvedValue(DATA_DIR);
+    writeTextFile.mockResolvedValue(undefined);
+    remove.mockResolvedValue(undefined);
+    document.head.innerHTML = '';
+  });
+
+  it('reports bundled / custom / none', async () => {
+    exists.mockResolvedValue(false);
+    expect(await getUserCssStatus()).toBe('none');
+    exists.mockResolvedValue(true);
+    readTextFile.mockResolvedValue('CLAUDE_THEME_CSS\r\n');
+    expect(await getUserCssStatus()).toBe('bundled');
+    readTextFile.mockResolvedValue('.mine{}');
+    expect(await getUserCssStatus()).toBe('custom');
+  });
+
+  it('restoreBundledTheme writes theme + fingerprint and applies it live', async () => {
+    document.head.innerHTML = `<style id="${STYLE_ID}">.old{}</style>`;
+    await restoreBundledTheme();
+    expect(writeTextFile.mock.calls[0]).toEqual([USER_CSS, 'CLAUDE_THEME_CSS']);
+    expect(writeTextFile.mock.calls[1][0]).toBe(SENTINEL);
+    expect(injected()?.textContent).toBe('CLAUDE_THEME_CSS');
+  });
+
+  it('disableUserCss deletes user.css, keeps it from re-seeding, and removes the live style', async () => {
+    document.head.innerHTML = `<style id="${STYLE_ID}">.x{}</style>`;
+    exists.mockImplementation(async (p: string) => p === USER_CSS); // no sentinel yet
+    await disableUserCss();
+    expect(remove).toHaveBeenCalledWith(USER_CSS);
+    expect(writeTextFile.mock.calls[0][0]).toBe(SENTINEL);
+    expect(injected()).toBeNull();
   });
 });

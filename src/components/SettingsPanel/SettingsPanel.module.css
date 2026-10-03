@@ -1,0 +1,271 @@
+/* Settings panel modal.
+ *
+ * Sits BELOW the confirm dialog (z-index 10000) so "restore / disable
+ * theme" confirmations stack on top of it. Chrome, not document: like the
+ * lightbox backdrop, counter-scale `body { zoom }` so the panel renders at
+ * its native size at any page zoom. Colors come from the app tokens, so
+ * the default palette and any user.css theme both style it. */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  zoom: var(--page-zoom-inv, 1);
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  font-family: var(--font-stack-body);
+  animation: backdropIn 120ms ease-out both;
+}
+
+@keyframes backdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.panel {
+  width: min(560px, 100%);
+  max-height: min(720px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  color: var(--fg-default);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  animation: panelIn 160ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 14px 22px;
+  border-bottom: 1px solid var(--border-muted);
+  flex: 0 0 auto;
+}
+
+.heading {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.closeBtn {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.closeBtn:hover {
+  background: var(--bg-hover);
+  color: var(--fg-default);
+}
+
+.body {
+  overflow-y: auto;
+  padding: 6px 22px 18px;
+}
+
+.section {
+  padding: 12px 0 4px;
+}
+
+.section + .section {
+  border-top: 1px solid var(--border-muted);
+}
+
+.sectionTitle {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.labelCol {
+  min-width: 0;
+}
+
+.label {
+  font-size: 14px;
+}
+
+.hint {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.control {
+  flex: 0 0 auto;
+}
+
+/* ---- Switch ---- */
+.switch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: 11px;
+  background: var(--bg-hover);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.switchOn {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.switchKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease;
+}
+
+.switchOn .switchKnob {
+  transform: translateX(16px);
+}
+
+/* ---- Segmented control ---- */
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border-default);
+  border-radius: 7px;
+  background: var(--bg-hover);
+}
+
+.segment {
+  min-width: 44px;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.segment:hover {
+  color: var(--fg-default);
+}
+
+.segmentActive {
+  background: var(--bg-elevated);
+  color: var(--fg-default);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+/* ---- Zoom stepper ---- */
+.stepper {
+  display: inline-flex;
+  border: 1px solid var(--border-default);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.stepper button {
+  min-width: 32px;
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  color: var(--fg-default);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.stepper button:hover {
+  background: var(--bg-hover);
+}
+
+.stepperValue {
+  min-width: 56px !important;
+  font-size: 13px !important;
+  font-variant-numeric: tabular-nums;
+  border-left: 1px solid var(--border-default) !important;
+  border-right: 1px solid var(--border-default) !important;
+}
+
+/* ---- Theme-file actions ---- */
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.actionBtn {
+  padding: 5px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-default);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.actionBtn:hover {
+  background: var(--bg-hover);
+}
+
+/* ---- About ---- */
+.value {
+  font-size: 13px;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.path {
+  display: inline-block;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  user-select: text;
+  font-family: var(--font-stack-code);
+  font-size: 12px;
+}
+
+.switch:focus-visible,
+.segment:focus-visible,
+.stepper button:focus-visible,
+.actionBtn:focus-visible,
+.closeBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}

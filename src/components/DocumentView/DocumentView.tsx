@@ -20,7 +20,7 @@ import type { LoadedDocument } from '../../lib/tauri';
 import { useScrollMemory } from '../../hooks/useScrollMemory';
 import { useEditMode } from '../EditModeProvider/useEditMode';
 import { useEditorScrollSync } from '../Editor/useEditorScrollSync';
-import { getSettings } from '../../lib/settingsStore';
+import { useSettings } from '../../hooks/useSettings';
 import { DEFAULT_EDITOR_SETTINGS } from '../../lib/settings';
 import { useContextMenu, type ContextMenuItem } from '../ContextMenu/ContextMenuContext';
 import { useStatusBar } from '../StatusBar/StatusBarContext';
@@ -243,18 +243,9 @@ export function DocumentView({
   // offset translates the full-buffer line into a body line that the
   // rehypeSourceLine stamps use.
   const { cursor, jumpToEditorLine } = useEditMode();
-  const [scrollSyncEnabled, setScrollSyncEnabled] = useState<boolean>(
-    DEFAULT_EDITOR_SETTINGS.scrollSync,
-  );
-  useEffect(() => {
-    let cancelled = false;
-    void getSettings().then((s) => {
-      if (!cancelled) setScrollSyncEnabled(s.editor.scrollSync);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Live: follows the settings panel without a remount.
+  const scrollSyncEnabled =
+    useSettings()?.editor.scrollSync ?? DEFAULT_EDITOR_SETTINGS.scrollSync;
   const lineOffset = useMemo(() => frontmatterLineOffset(frontmatterRaw), [frontmatterRaw]);
   // Body line count (frontmatter-stripped) in the SAME coordinate system as
   // the data-source-line stamps — lets the sync hook interpolate inside the
