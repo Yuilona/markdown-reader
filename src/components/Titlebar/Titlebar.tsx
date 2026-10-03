@@ -27,6 +27,9 @@ interface TitlebarProps {
    *  the centered title (basename) + R-EDIT-5.3 dirty prefix.
    *  Optional so tests that mount Titlebar standalone keep working. */
   docPath?: string | null;
+  /** Whether a document (saved or an unnamed Ctrl+N buffer) is open.
+   *  The edit toggle is hidden without one — there's nothing to edit. */
+  hasDocument?: boolean;
 }
 
 /**
@@ -42,7 +45,7 @@ interface TitlebarProps {
  *     so the user has a constant visual signal that there are
  *     unsaved changes.
  */
-export function Titlebar({ docPath }: TitlebarProps = {}) {
+export function Titlebar({ docPath, hasDocument = false }: TitlebarProps = {}) {
   const { mode, setMode } = useTheme();
   const { mode: editMode, toggleMode, dirty } = useEditMode();
   const { zoom, zoomIn, zoomOut, resetZoom } = usePageZoom();
@@ -139,16 +142,18 @@ export function Titlebar({ docPath }: TitlebarProps = {}) {
             </button>
           </div>
         )}
-        <button
-          type="button"
-          className={`${styles.btn} ${styles.editBtn}`}
-          onClick={handleEditClick}
-          aria-label={editTooltip}
-          title={editTooltip}
-          aria-pressed={isEdit}
-        >
-          <EditModeIcon isEdit={isEdit} />
-        </button>
+        {hasDocument && (
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.editBtn}`}
+            onClick={handleEditClick}
+            aria-label={editTooltip}
+            title={editTooltip}
+            aria-pressed={isEdit}
+          >
+            <EditModeIcon isEdit={isEdit} />
+          </button>
+        )}
         <button
           type="button"
           className={`${styles.btn} ${styles.themeBtn}`}

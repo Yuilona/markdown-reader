@@ -13,7 +13,10 @@
   color: var(--fg-muted);
 }
 
-.summary {
+/* `:global(.markdown-body)` lifts this to (0,2,0): github-markdown-css's
+ * `.markdown-body summary { display: list-item }` (0,1,1) otherwise wins,
+ * which silently dropped inline-flex — and with it the icon/label `gap`. */
+:global(.markdown-body) .summary {
   list-style: none;
   cursor: pointer;
   display: inline-flex;
@@ -45,6 +48,9 @@
 }
 
 .label {
+  /* Chrome label: UI font, not the document's (theme) serif. */
+  font-family: var(--font-stack-body);
+  font-size: 0.9em;
   font-weight: 500;
 }
 

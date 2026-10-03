@@ -173,8 +173,14 @@ const rehypePluginsNoHighlightWithMermaid: PluggableList = [
  * footnote links and backrefs went nowhere. Drop remark-rehype's prefix so
  * sanitize applies the single `user-content-` (GitHub's exact output);
  * `scrollToAnchor` resolves `#fn-1` → `user-content-fn-1`, as GitHub's JS
- * does. Module constant so the memoized markdownEl stays stable. */
-const REMARK_REHYPE_OPTIONS = { clobberPrefix: '' };
+ * does. The footnote section heading / backlink labels are localized to
+ * match the rest of the (Chinese) UI. Module constant so the memoized
+ * markdownEl stays stable. */
+const REMARK_REHYPE_OPTIONS = {
+  clobberPrefix: '',
+  footnoteLabel: '脚注',
+  footnoteBackLabel: (referenceIndex: number) => `返回正文第 ${referenceIndex + 1} 处引用`,
+};
 
 /** Char-count threshold above which Shiki is dropped on first paint (R3).
  * ~2M chars (~2MB of ASCII); tuned to avoid multi-second main-thread freezes

@@ -90,10 +90,10 @@ export function CodeBlock({ children, sourceLine }: CodeBlockProps) {
           type="button"
           className={styles.copyBtn}
           onClick={handleCopy}
-          aria-label="Copy code"
-          title="复制"
+          aria-label="复制代码"
+          title="复制代码"
         >
-          {copied ? '✓' : 'Copy'}
+          {copied ? '✓ 已复制' : '复制'}
         </button>
       </div>
       {/* Render the original `<pre>` markup; react-markdown built it as

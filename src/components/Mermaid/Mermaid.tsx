@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { getMermaidTheme, loadMermaid, setMermaidTheme } from '../../lib/mermaidLazy';
 import { getCached, putCached } from '../../lib/mermaidCache';
 import * as logger from '../../lib/logger';
@@ -25,6 +25,35 @@ import styles from './Mermaid.module.css';
  */
 function toMermaidThemeName(effective: 'light' | 'dark'): 'default' | 'dark' {
   return effective === 'dark' ? 'dark' : 'default';
+}
+
+/** Inline viewport limits for a diagram's content height (document px,
+ *  i.e. before page zoom). Below MIN a one-row diagram would be cramped
+ *  under the hover toolbar; above MAX the reader reaches for fullscreen. */
+const MIN_DIAGRAM_HEIGHT = 120;
+const MAX_DIAGRAM_HEIGHT = 560;
+
+/**
+ * Size the container to the diagram instead of a fixed 400px box, which
+ * left simple flowcharts floating in a band of empty space. Height follows
+ * the diagram's aspect ratio at the available width (never upscaled past
+ * its natural size), clamped to [MIN, MAX]; svg-pan-zoom's `fit` then
+ * fills that viewport. Reads the viewBox, which survives the width/height
+ * attribute stripping below.
+ */
+function fitContainerToDiagram(container: HTMLElement, svg: SVGSVGElement): void {
+  const vb = svg.viewBox?.baseVal;
+  if (!vb || vb.width <= 0 || vb.height <= 0) return;
+  const cs = getComputedStyle(container);
+  const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  const borderY = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+  const innerWidth = container.clientWidth - padX;
+  if (innerWidth <= 0) return;
+  const natural = vb.height * Math.min(1, innerWidth / vb.width);
+  const content = Math.min(MAX_DIAGRAM_HEIGHT, Math.max(MIN_DIAGRAM_HEIGHT, natural));
+  // .container is border-box, so the height includes padding + border.
+  container.style.height = `${Math.round(content + padY + borderY)}px`;
 }
 
 interface MermaidProps {
@@ -176,6 +205,15 @@ export function Mermaid({ source, onRequestFullscreen, sourceLine }: MermaidProp
     };
   }, [source, mermaidTheme]);
 
+  // ---- Step 2b: size the container to the diagram BEFORE paint, so the
+  // fixed CSS default never flashes. svg-pan-zoom attaches after.
+  useLayoutEffect(() => {
+    if (state.kind !== 'rendered') return;
+    const container = containerRef.current;
+    const svg = container?.querySelector<SVGSVGElement>('svg');
+    if (container && svg) fitContainerToDiagram(container, svg);
+  }, [state]);
+
   // ---- Step 3: after the SVG is in the DOM, attach svg-pan-zoom.
   useEffect(() => {
     if (state.kind !== 'rendered') return;
@@ -262,7 +300,26 @@ export function Mermaid({ source, onRequestFullscreen, sourceLine }: MermaidProp
       // still resets the cursor.
       window.addEventListener('mouseup', upHandler);
 
+      // Width changes (window resize, split-view drag, the TOC making
+      // room) change the right height: re-size and re-fit. Height-only
+      // changes are our own doing and are ignored.
+      let lastWidth = container.clientWidth;
+      const resizeObserver =
+        typeof ResizeObserver === 'undefined'
+          ? null
+          : new ResizeObserver(() => {
+              const width = container.clientWidth;
+              if (Math.abs(width - lastWidth) < 1) return;
+              lastWidth = width;
+              fitContainerToDiagram(container, svg);
+              panZoom.resize();
+              panZoom.fit();
+              panZoom.center();
+            });
+      resizeObserver?.observe(container);
+
       customCleanupRef.current = () => {
+        resizeObserver?.disconnect();
         svg.removeEventListener('wheel', wheelHandler);
         svg.removeEventListener('dblclick', dblClickHandler);
         svg.removeEventListener('mousedown', downHandler);

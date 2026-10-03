@@ -49,7 +49,7 @@ export function Frontmatter({ raw }: FrontmatterProps) {
             />
           </svg>
         </span>
-        <span className={styles.label}>Frontmatter</span>
+        <span className={styles.label}>元数据</span>
       </summary>
       {/* `data-frontmatter-body`: marker used by the SearchBar's skip-
         * selector logic. When `isExpanded` is false the SearchBar adds

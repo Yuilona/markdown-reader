@@ -384,9 +384,11 @@ function AppBody(props: AppBodyProps) {
   }, [guardedAction, handleReloadDocument]);
 
   // v1.0 PR-A: Ctrl+E toggles edit mode through the provider.
+  // No document → nothing to edit (the titlebar hides the toggle too).
   const handleToggleEditMode = useCallback(() => {
+    if (!doc) return;
     void toggleMode();
-  }, [toggleMode]);
+  }, [doc, toggleMode]);
 
   // v1.0 PR-A: Ctrl+S explicit save. Guard against "no doc" (the
   // EditModeProvider's save no-ops in that case, but skipping the
@@ -522,7 +524,7 @@ function AppBody(props: AppBodyProps) {
 
   return (
     <div className="app-root">
-      <Titlebar docPath={doc?.path ?? null} />
+      <Titlebar docPath={doc?.path ?? null} hasDocument={doc !== null} />
       <LightboxProvider>
         <main className="app-main">
           <ErrorBoundary
@@ -573,7 +575,7 @@ function AppBody(props: AppBodyProps) {
           </ErrorBoundary>
         </main>
       </LightboxProvider>
-      <StatusBar />
+      <StatusBar hasDocument={doc !== null} />
     </div>
   );
 }

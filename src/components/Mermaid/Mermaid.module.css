@@ -19,13 +19,12 @@
   border: 1px solid var(--border-img-placeholder);
   border-radius: 6px;
   background: var(--bg-mermaid-container);
-  /* FIXED height (not min-height) — gives the SVG host a definite
-   * parent height so its `height: 100%` resolves correctly. svg-pan-zoom
-   * with fit:true scales the diagram content to fill this viewport
-   * regardless of the diagram's natural size — small diagrams scale up
-   * to use the room, large diagrams scale down. The user reaches for
-   * the fullscreen toolbar button when 400px isn't enough. */
-  height: 400px;
+  /* A definite height (not min-height) gives the SVG host a parent to
+   * resolve its `height: 100%` against. This value is only the loading /
+   * pre-measure default: once rendered, Mermaid.tsx sets an inline height
+   * from the diagram's aspect ratio (fitContainerToDiagram), and
+   * svg-pan-zoom's fit fills that. Fullscreen is there for big diagrams. */
+  height: 300px;
   box-sizing: border-box;
   /* Render isolation so a deep zoom doesn't bleed shadows etc. into
      the surrounding markdown body. */

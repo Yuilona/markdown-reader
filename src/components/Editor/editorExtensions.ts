@@ -4,6 +4,7 @@ import {
   syntaxHighlighting,
   indentUnit,
   defaultHighlightStyle,
+  foldGutter,
 } from '@codemirror/language';
 import { oneDarkHighlightStyle } from '@codemirror/theme-one-dark';
 import { tags as t } from '@lezer/highlight';
@@ -92,6 +93,24 @@ function chromeTheme(dark: boolean): Extension {
         backgroundColor: 'var(--bg-hover)',
         color: 'var(--fg-default)',
       },
+      // Fold markers (see foldGutterExtension): hidden until the gutter is
+      // hovered, so the margin isn't a column of chevrons; a FOLDED line's
+      // marker stays visible — it's the only cue that text is hidden.
+      '.cm-fold-marker': {
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '14px',
+        height: '100%',
+        color: 'var(--fg-subtle)',
+        cursor: 'pointer',
+        opacity: '0',
+        transition: 'opacity 0.15s ease',
+      },
+      '.cm-gutters:hover .cm-fold-marker, .cm-fold-marker.cm-fold-marker-folded': {
+        opacity: '1',
+      },
+      '.cm-fold-marker:hover': { color: 'var(--fg-default)' },
       '.cm-foldPlaceholder': {
         backgroundColor: 'var(--bg-elevated)',
         border: 'none',
@@ -156,6 +175,22 @@ export function themeExtension(effective: 'light' | 'dark'): Extension {
     syntaxHighlighting(effective === 'dark' ? oneDarkHighlightStyle : defaultHighlightStyle),
   ];
 }
+
+/** Fold gutter with SVG chevrons, replacing basicSetup's default text
+ *  markers (`⌄` / `›`), which rendered as a column of bare `v` glyphs
+ *  beside every foldable block. Visibility rules live in chromeTheme. */
+export const foldGutterExtension: Extension = foldGutter({
+  markerDOM(open) {
+    const marker = document.createElement('span');
+    marker.className = open ? 'cm-fold-marker' : 'cm-fold-marker cm-fold-marker-folded';
+    marker.title = open ? '折叠' : '展开';
+    // Down chevron when open, right chevron when folded.
+    marker.innerHTML = open
+      ? '<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+      : '<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 2 6.5 5 3.5 8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    return marker;
+  },
+});
 
 /** Settings-driven extensions (R-EDIT-12): soft-wrap + indent width.
  *  Line numbers are handled separately via @uiw/react-codemirror's

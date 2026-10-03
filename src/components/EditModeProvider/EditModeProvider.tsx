@@ -13,6 +13,7 @@ import * as logger from '../../lib/logger';
 import { DEFAULT_SETTINGS } from '../../lib/settings';
 import { getSettings } from '../../lib/settingsStore';
 import { useToast } from '../Toast/useToast';
+import { textStats } from '../../lib/textStats';
 
 /**
  * Edit-mode provider (v1.0 PR-A, R-EDIT-3 / R-EDIT-5).
@@ -97,10 +98,12 @@ export interface EditModeContextValue {
   cursor: CursorInfo | null;
   /** Setter for the editor to push its cursor state up. */
   setCursor: (cursor: CursorInfo | null) => void;
-  /** Approximate word count of the current buffer. PR-A: simple
-   *  whitespace split. Recomputed on every bufferText change — cheap
-   *  enough for typical doc sizes (well under 1ms for a 100KB doc). */
+  /** Word count of the current buffer (CJK-aware — see textStats).
+   *  Recomputed on every bufferText change — cheap enough for typical
+   *  doc sizes (well under 1ms for a 100KB doc). */
   wordCount: number;
+  /** Estimated reading time of the buffer, in minutes. */
+  readingMinutes: number;
   /** v1.0 bidirectional line sync: CodeMirrorEditor registers an
    *  imperative "move cursor to + flash line" handler here (or null on
    *  unmount). DocumentView calls jumpToEditorLine when the user clicks
@@ -125,18 +128,6 @@ interface EditModeProviderProps {
    *  when the user cancelled. Rethrows on a real write failure. */
   onSaveAs: (text: string) => Promise<LoadedDocument | null>;
   children: ReactNode;
-}
-
-/** Cheap word count: split on whitespace runs and count non-empty
- *  tokens. For Chinese (no spaces) this is a poor approximation, but
- *  no existing v0.1 string utility handles CJK either — we'll revisit
- *  with a proper grapheme-aware counter in PR-B if users complain.
- *  Result is monotonically clamped to >= 0 so an empty buffer reports
- *  0 (split on empty string yields a single empty token). */
-function countWords(text: string): number {
-  const trimmed = text.trim();
-  if (!trimmed) return 0;
-  return trimmed.split(/\s+/).length;
 }
 
 export function EditModeProvider({
@@ -233,7 +224,10 @@ export function EditModeProvider({
     return bufferText !== doc.text;
   }, [doc, bufferText]);
 
-  const wordCount = useMemo(() => countWords(bufferText), [bufferText]);
+  const { words: wordCount, minutes: readingMinutes } = useMemo(
+    () => textStats(bufferText),
+    [bufferText],
+  );
 
   // Save: write bufferText to disk via tauri.saveDocument. On success,
   // sync the parent's LoadedDocument so doc.text === bufferText (which
@@ -376,6 +370,7 @@ export function EditModeProvider({
       cursor,
       setCursor,
       wordCount,
+      readingMinutes,
       registerEditorJump,
       jumpToEditorLine,
     }),
@@ -391,6 +386,7 @@ export function EditModeProvider({
       cursor,
       setCursor,
       wordCount,
+      readingMinutes,
       registerEditorJump,
       jumpToEditorLine,
     ],

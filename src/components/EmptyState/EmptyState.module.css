@@ -166,6 +166,13 @@
   overflow-y: auto;
 }
 
+/* More rows below the fold (set by RecentList): fade the bottom edge so a
+ * half-visible row reads as "scroll for more", not a clipping bug. */
+.recentListMoreBelow {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 40px), transparent);
+}
+
 .recentItem {
   display: flex;
   align-items: center;

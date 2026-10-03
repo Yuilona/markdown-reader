@@ -32,6 +32,7 @@ const NOOP: EditModeContextValue = {
   cursor: null,
   setCursor: () => undefined,
   wordCount: 0,
+  readingMinutes: 0,
   registerEditorJump: () => undefined,
   jumpToEditorLine: () => undefined,
 };

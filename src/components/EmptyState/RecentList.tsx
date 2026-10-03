@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 
 import { readRecent, removeRecent, type RecentEntry } from '../../lib/recentFiles';
 import { basename, dirname } from '../../lib/pathUtils';
@@ -34,6 +34,26 @@ export function RecentList({ onPick }: RecentListProps) {
     void refresh();
   }, [refresh]);
 
+  // In a short window the list scrolls, and a row cut in half at the bottom
+  // edge read as a rendering glitch. While more rows sit below the fold,
+  // fade the bottom edge as a "scroll for more" cue; drop it at the end.
+  const listRef = useRef<HTMLUListElement | null>(null);
+  const [moreBelow, setMoreBelow] = useState(false);
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const update = () =>
+      setMoreBelow(list.scrollHeight - list.scrollTop - list.clientHeight > 1);
+    update();
+    list.addEventListener('scroll', update, { passive: true });
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    resizeObserver?.observe(list);
+    return () => {
+      list.removeEventListener('scroll', update);
+      resizeObserver?.disconnect();
+    };
+  }, [entries]);
+
   const handleRemove = async (e: React.MouseEvent, path: string) => {
     e.stopPropagation(); // prevent the row's onClick from firing
     const next = await removeRecent(path);
@@ -51,7 +71,10 @@ export function RecentList({ onPick }: RecentListProps) {
       {entries.length === 0 ? (
         <p className={styles.recentEmpty}>暂无最近文件</p>
       ) : (
-        <ul className={styles.recentList}>
+        <ul
+          ref={listRef}
+          className={`${styles.recentList} ${moreBelow ? styles.recentListMoreBelow : ''}`}
+        >
           {entries.map((entry) => (
             <li
               key={entry.path}

@@ -79,7 +79,9 @@
 }
 
 .copyBtn {
-  font-family: inherit;
+  /* UI chrome, not document text: inheriting would pick up the article's
+   * (theme) serif and sit oddly next to the monospace language label. */
+  font-family: var(--font-stack-body);
   font-size: 11px;
   color: var(--fg-default);
   background: var(--bg-codeblock-toolbar);

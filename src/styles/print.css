@@ -185,7 +185,7 @@
 
   /* ---- Mermaid (R11.4) ----
    * The host div has the `mermaid-host` class (set in Mermaid.tsx). On
-   * screen it has a fixed 400px height + overflow hidden so svg-pan-
+   * screen it has a JS-set fixed height + overflow hidden so svg-pan-
    * zoom can take ownership. In print we want the full SVG visible,
    * scaled to fit the page width.
    */

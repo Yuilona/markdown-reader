@@ -12,7 +12,7 @@ import { useEditMode } from '../EditModeProvider/useEditMode';
 import { useTheme } from '../ThemeProvider/useTheme';
 import { getSettings } from '../../lib/settingsStore';
 import { DEFAULT_EDITOR_SETTINGS, type EditorSettings } from '../../lib/settings';
-import { themeExtension, settingsExtension } from './editorExtensions';
+import { themeExtension, settingsExtension, foldGutterExtension } from './editorExtensions';
 import { codeLanguages } from './codeLanguages';
 import { Math as mathMarkdown } from './mathMarkdown';
 import { markdownActionsKeymap } from './markdownKeymap';
@@ -106,6 +106,7 @@ function CodeMirrorEditor({ value, onChange }: CodeMirrorEditorProps) {
       markdownActionsKeymap,
       keymap.of([indentWithTab]),
       flashLineExtension,
+      foldGutterExtension,
       themeExtension(effective),
       settingsExtension(editorSettings),
       EditorView.updateListener.of(onUpdate),
@@ -114,7 +115,7 @@ function CodeMirrorEditor({ value, onChange }: CodeMirrorEditorProps) {
   );
 
   // basicSetup overrides — only lineNumbers is settings-driven; the rest
-  // keep their defaults (history, multi-cursor, search, brackets, fold).
+  // keep their defaults (history, multi-cursor, search, brackets).
   const basicSetup = useMemo(
     () => ({
       lineNumbers: editorSettings.lineNumbers,
@@ -122,6 +123,8 @@ function CodeMirrorEditor({ value, onChange }: CodeMirrorEditorProps) {
       // defaultHighlightStyle (unreadable on the dark theme). We supply the
       // theme-aware code-token highlighting ourselves via themeExtension.
       syntaxHighlighting: false,
+      // Replaced by foldGutterExtension (chevron markers, hover-revealed).
+      foldGutter: false,
     }),
     [editorSettings.lineNumbers],
   );
