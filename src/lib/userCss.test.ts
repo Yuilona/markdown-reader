@@ -14,8 +14,15 @@ vi.mock('./tauri', () => ({ getDataDir }));
 vi.mock('./logger', () => ({ warn: vi.fn(), info: vi.fn(), error: vi.fn() }));
 // The `?raw` import of the bundled theme → a fixed sentinel string.
 vi.mock('../../theme/claude.user.css?raw', () => ({ default: 'CLAUDE_THEME_CSS' }));
+// A stand-in "theme shipped before sentinels carried fingerprints". The real
+// table holds fingerprints of historical theme/claude.user.css versions.
+vi.mock('./themeFingerprint', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('./themeFingerprint')>();
+  return { ...mod, LEGACY_THEME_FINGERPRINTS: new Set([mod.themeFingerprint('LEGACY_THEME_CSS')]) };
+});
 
-import { loadUserCss } from './userCss';
+import { loadUserCss, planUserCss } from './userCss';
+import { themeFingerprint } from './themeFingerprint';
 
 const DATA_DIR = 'C:\\app\\data';
 const USER_CSS = `${DATA_DIR}\\user.css`;
@@ -71,7 +78,8 @@ describe('loadUserCss — first-run seeding + load', () => {
     await loadUserCss();
 
     expect(writeTextFile).not.toHaveBeenCalled();
-    expect(readTextFile).not.toHaveBeenCalled();
+    // Only the sentinel is read (for its fingerprint) — never a user.css.
+    expect(readTextFile).not.toHaveBeenCalledWith(USER_CSS);
     expect(injected()).toBeNull();
   });
 
@@ -90,5 +98,74 @@ describe('loadUserCss — first-run seeding + load', () => {
     writeTextFile.mockRejectedValue(new Error('disk full'));
 
     await expect(loadUserCss()).resolves.toBeUndefined();
+  });
+});
+
+describe('planUserCss — bundled theme auto-upgrade', () => {
+  const bundled = 'CLAUDE_THEME_CSS';
+  const sentinelFor = (css: string) =>
+    `seeded 2026-10-04T00:00:00.000Z\nfingerprint ${themeFingerprint(css)}\n`;
+
+  it('seeds a never-seeded install and respects a deletion', () => {
+    expect(planUserCss({ userCss: null, sentinel: null, bundled }).kind).toBe('seed');
+    expect(planUserCss({ userCss: null, sentinel: 'seeded x\n', bundled }).kind).toBe('none');
+  });
+
+  it('loads a user.css that already is the current theme (CRLF or not) without rewriting', () => {
+    expect(planUserCss({ userCss: bundled, sentinel: sentinelFor(bundled), bundled }).kind).toBe('load');
+    expect(planUserCss({ userCss: 'a\r\nb\r\n', sentinel: null, bundled: 'a\nb' }).kind).toBe('load');
+  });
+
+  it('upgrades the untouched theme recorded in the sentinel', () => {
+    expect(
+      planUserCss({ userCss: 'OLD_THEME', sentinel: sentinelFor('OLD_THEME'), bundled }).kind,
+    ).toBe('upgrade');
+  });
+
+  it('upgrades an untouched legacy theme (old sentinel without fingerprint, or no sentinel)', () => {
+    expect(
+      planUserCss({ userCss: 'LEGACY_THEME_CSS', sentinel: 'seeded 2026-05-25\n', bundled }).kind,
+    ).toBe('upgrade');
+    expect(planUserCss({ userCss: 'LEGACY_THEME_CSS', sentinel: null, bundled }).kind).toBe('upgrade');
+  });
+
+  it('never touches a user-edited theme', () => {
+    expect(
+      planUserCss({ userCss: 'OLD_THEME /* mine */', sentinel: sentinelFor('OLD_THEME'), bundled }).kind,
+    ).toBe('load');
+    expect(planUserCss({ userCss: 'LEGACY_THEME_CSS .x{}', sentinel: null, bundled }).kind).toBe('load');
+  });
+});
+
+describe('loadUserCss — upgrade path I/O', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getDataDir.mockResolvedValue(DATA_DIR);
+    writeTextFile.mockResolvedValue(undefined);
+    document.head.innerHTML = '';
+  });
+
+  it('replaces an untouched old theme, records the new fingerprint, injects the new theme', async () => {
+    exists.mockResolvedValue(true);
+    readTextFile.mockImplementation(async (p: string) =>
+      p === USER_CSS ? 'OLD_THEME' : `seeded x\nfingerprint ${themeFingerprint('OLD_THEME')}\n`,
+    );
+
+    await loadUserCss();
+
+    expect(writeTextFile.mock.calls[0]).toEqual([USER_CSS, 'CLAUDE_THEME_CSS']);
+    expect(writeTextFile.mock.calls[1][0]).toBe(SENTINEL);
+    expect(writeTextFile.mock.calls[1][1]).toContain(
+      `fingerprint ${themeFingerprint('CLAUDE_THEME_CSS')}`,
+    );
+    expect(injected()?.textContent).toBe('CLAUDE_THEME_CSS');
+  });
+
+  it('seeding writes a fingerprint so later theme releases can upgrade it', async () => {
+    exists.mockResolvedValue(false);
+
+    await loadUserCss();
+
+    expect(writeTextFile.mock.calls[1][1]).toMatch(/^seeded .+\nfingerprint [0-9a-f]{14}\n$/);
   });
 });

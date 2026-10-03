@@ -24,8 +24,9 @@ Typora 那种 WYSIWYG，也不做 Obsidian 的 vault。
 - 浅色 / 深色 / 跟随系统三主题，200ms 渐变过渡
 - 开箱即用的 Claude「Quiet Serif」主题：首次启动自动写入 `data/user.css` 并启用，
   内置 Source Serif 4 / Inter / JetBrains Mono + 思源宋体（Noto Serif SC）子集四款
-  开源字体（OFL，随程序加载，无需安装系统字体），中英文都是衬线观感；想回到默认
-  风格删掉 `data/user.css` 重启即可（不会被重新生成）
+  开源字体（OFL，随程序加载，无需安装系统字体），中英文都是衬线观感；没改过的主题
+  文件会随新版本自动更新，改过的永不覆盖；想回到默认风格删掉 `data/user.css` 重启
+  即可（不会被重新生成）
 - 自定义主题：`data/user.css` 可整体换肤（阅读 + 编辑器 chrome + 语法 +
   滚动条都跟随）；主题源文件 `theme/claude.user.css`，开发指南见
   [`docs/theming.md`](docs/theming.md)
@@ -151,8 +152,8 @@ app 把所有持久化数据放在**安装目录下的 `data/` 子文件夹**。
 | `recent.json` | 最近 10 文件（LRU、去重） |
 | `scroll-positions.json` | 每文件滚动位置（LRU 100） |
 | `window.json` | 窗口尺寸 / 位置 / 最大化状态（启动时恢复） |
-| `user.css` | 用户自定义样式（启动时一次性加载，写在 `<head>` 最末）；首次运行自动写入 Claude 主题，删除后重启不再重建 |
-| `.theme-seeded` | 标记 Claude 主题已播种过一次（删 `user.css` 后据此不再重建，尊重用户选择） |
+| `user.css` | 用户自定义样式（启动时一次性加载，写在 `<head>` 最末）；首次运行自动写入 Claude 主题，未修改时随新版本自动更新，改过则永不覆盖，删除后重启不再重建 |
+| `.theme-seeded` | 标记 Claude 主题已播种过一次（删 `user.css` 后据此不再重建，尊重用户选择），并记录上次写入主题的指纹（据此判断 `user.css` 是否被改过） |
 | `logs/app.log` | 滚动日志（5MB 上限 + 7 天保留 `.bak`） |
 
 > 仍无 GUI 设置面板，要改主题以外的设置（页面缩放区间、默认显示 TOC、
