@@ -41,6 +41,18 @@ const SCHEMA_VERSION = 1 as const;
  *  treat the previous monitor as "gone" and re-center on primary. */
 const MIN_VISIBLE_OVERLAP_PX = 100;
 
+/** Windows parks a minimized window at (-32000, -32000). A saved position
+ *  at or beyond this is a minimized snapshot, never a real placement. */
+const MINIMIZED_POSITION_SENTINEL = -32000;
+
+/** Smallest restorable inner size (physical px). Well below the
+ *  tauri.conf.json minWidth/minHeight (600×400 logical), so it never
+ *  rejects a real window — but it does reject the ~144×19 a minimized
+ *  window reports. `setSize` bypasses the conf min size, so without this
+ *  floor a poisoned record restores as a tiny "short line" window. */
+const MIN_RESTORE_WIDTH_PX = 300;
+const MIN_RESTORE_HEIGHT_PX = 200;
+
 export interface WindowState {
   version: typeof SCHEMA_VERSION;
   /** Outer-position X in physical pixels (relative to the virtual
@@ -63,7 +75,7 @@ export interface WindowState {
  *  Any missing / wrong-type field invalidates the entire record — a
  *  partially valid window-state is more dangerous than no record
  *  (it could place the window at NaN,0). */
-function validate(parsed: unknown): WindowState | null {
+export function validateWindowState(parsed: unknown): WindowState | null {
   if (!parsed || typeof parsed !== 'object') return null;
   const obj = parsed as Partial<WindowState>;
   const fields: Array<keyof Pick<WindowState, 'x' | 'y' | 'width' | 'height'>> =
@@ -77,6 +89,21 @@ function validate(parsed: unknown): WindowState | null {
   // Width / height must be positive — a 0-dimension window is unusable
   // and is the most common "looks valid but breaks restore" failure.
   if ((obj.width as number) <= 0 || (obj.height as number) <= 0) return null;
+  // A minimized-window snapshot (written by builds before the save-side
+  // isMinimized() guard) — reject it so the app self-heals to the
+  // tauri.conf.json defaults instead of restoring a 160×28 sliver.
+  if (
+    (obj.x as number) <= MINIMIZED_POSITION_SENTINEL ||
+    (obj.y as number) <= MINIMIZED_POSITION_SENTINEL
+  ) {
+    return null;
+  }
+  if (
+    (obj.width as number) < MIN_RESTORE_WIDTH_PX ||
+    (obj.height as number) < MIN_RESTORE_HEIGHT_PX
+  ) {
+    return null;
+  }
   return {
     version: SCHEMA_VERSION,
     x: Math.round(obj.x as number),
@@ -93,7 +120,7 @@ function validate(parsed: unknown): WindowState | null {
 export async function readWindowState(): Promise<WindowState | null> {
   const raw = await readJson<unknown>(FILE_NAME);
   if (raw === null) return null;
-  return validate(raw);
+  return validateWindowState(raw);
 }
 
 /** Atomic-write `state` to window.json. Errors surface to the caller so

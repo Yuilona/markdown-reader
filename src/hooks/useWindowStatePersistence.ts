@@ -67,6 +67,13 @@ export function useWindowStatePersistence(): void {
     /** Snapshot the live window state and write it to disk. */
     const saveCurrent = async (): Promise<void> => {
       try {
+        // BUG (fixed): minimizing fires onResized, and a minimized window
+        // reports (-32000, -32000) and ~144×19 — which got saved as the
+        // window geometry. Quitting while minimized (taskbar close, OS
+        // shutdown) then made the next launch restore a tiny sliver. Skip
+        // the save entirely: disk already holds the pre-minimize state,
+        // including its maximized flag.
+        if (await win.isMinimized()) return;
         const maximized = await win.isMaximized();
         // Only refresh the saved geometry from the LIVE window when it is
         // NOT maximized — otherwise innerSize()/outerPosition() return the
@@ -153,6 +160,13 @@ export function useWindowStatePersistence(): void {
             await win.setSize(new PhysicalSize(fixed.width, fixed.height));
             await win.setPosition(new PhysicalPosition(fixed.x, fixed.y));
           }
+        } else if (!cancelled) {
+          // No usable record (first launch, or a rejected poisoned one such
+          // as a minimized snapshot): persist the default geometry now so a
+          // bad file is replaced immediately. Can't rely on the close-time
+          // save for this — App.tsx's own onCloseRequested listener returns
+          // first and Tauri destroys the window before our async save lands.
+          await saveCurrent();
         }
       } catch (err) {
         // Restore failure is non-fatal — the app continues with the
