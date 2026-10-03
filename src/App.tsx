@@ -40,6 +40,15 @@ import { cleanupStaleTemp } from './lib/recentFiles';
 import { loadUserCss } from './lib/userCss';
 import { LinkRouterContext, type LinkRouterContextValue } from './lib/linkRouter';
 import { DEFAULT_SETTINGS } from './lib/settings';
+import {
+  backTarget,
+  EMPTY_HISTORY,
+  forwardTarget,
+  moveTo,
+  recordVisit,
+  type NavTarget,
+} from './lib/navHistory';
+import { basename } from './lib/pathUtils';
 import { getSettings, updateSettings } from './lib/settingsStore';
 import * as logger from './lib/logger';
 
@@ -162,6 +171,21 @@ function AppContent() {
   );
 
   /**
+   * Every "open this path" request from outside the editor (drag-drop, a
+   * second instance / file association, the CLI path, a link to another
+   * .md) goes through this ref. AppBody — which sits inside
+   * EditModeProvider and owns the dirty guard — points it at a GUARDED
+   * open. BUG (fixed): these paths called setDocFromPath directly, and the
+   * document swap reset the editor buffer, silently discarding unsaved
+   * edits. Until AppBody mounts it falls back to the plain open (nothing
+   * can be dirty yet).
+   */
+  const openRequestRef = useRef<(path: string) => void>((path) => {
+    void setDocFromPath(path);
+  });
+  const requestOpen = useCallback((path: string) => openRequestRef.current(path), []);
+
+  /**
    * v1.0 PR-A: invoked by EditModeProvider after a successful save
    * (Ctrl+S OR silent-save-on-mode-flip). We mint a fresh
    * LoadedDocument with the same path + the just-written text so
@@ -239,7 +263,7 @@ function AppContent() {
 
   // Wire drag-drop at the webview level.
   useDragDrop({
-    onValidDrop: setDocFromPath,
+    onValidDrop: requestOpen,
     onInvalidDrop: showDropError,
     onHoverChange: setIsDragOver,
   });
@@ -250,28 +274,26 @@ function AppContent() {
     void cleanupStaleTemp();
 
     const unlistenPromise = registerSecondInstanceListener({
-      onValidPath: setDocFromPath,
+      onValidPath: requestOpen,
       onInvalidPath: showDropError,
     });
 
     void takeCliLaunchPath().then((path) => {
-      if (path) void setDocFromPath(path);
+      if (path) requestOpen(path);
     });
 
     return () => {
       unlistenPromise.then((cleanup) => cleanup?.());
     };
-  }, [setDocFromPath, showDropError]);
+  }, [requestOpen, showDropError]);
 
   // PR-5b: link router context.
   const linkRouterValue = useMemo<LinkRouterContextValue>(
     () => ({
-      openDocument: (p) => {
-        void setDocFromPath(p);
-      },
+      openDocument: requestOpen,
       onError: showError,
     }),
-    [setDocFromPath, showError],
+    [requestOpen, showError],
   );
 
   useEffect(() => {
@@ -323,6 +345,7 @@ function AppContent() {
           handleBoundaryReset={handleBoundaryReset}
           setDoc={setDoc}
           setDocFromPath={setDocFromPath}
+          openRequestRef={openRequestRef}
         />
       </EditModeProvider>
     </LinkRouterContext.Provider>
@@ -343,6 +366,9 @@ interface AppBodyProps {
   handleBoundaryReset: () => void;
   setDoc: React.Dispatch<React.SetStateAction<LoadedDocument | null>>;
   setDocFromPath: (path: string) => Promise<void>;
+  /** Where outside open requests are routed — AppBody installs its
+   *  dirty-guarded open here (see AppContent). */
+  openRequestRef: React.MutableRefObject<(path: string) => void>;
 }
 
 /**
@@ -375,6 +401,7 @@ function AppBody(props: AppBodyProps) {
     handleBoundaryReset,
     setDoc,
     setDocFromPath,
+    openRequestRef,
   } = props;
 
   const { mode, bufferText, setBufferText, dirty, save, saveAs, setMode, toggleMode } =
@@ -386,6 +413,80 @@ function AppBody(props: AppBodyProps) {
   // so a cancelled Save As dialog aborts the destructive action.
   const guardedSave = useCallback(() => save(), [save]);
   const { guardedAction } = useDirtyGuard(dirty, guardedSave);
+
+  const toast = useToast();
+
+  // Outside open requests (drop, link, second instance, CLI) prompt about
+  // unsaved edits before the document swap resets the editor buffer.
+  useEffect(() => {
+    openRequestRef.current = (path) => {
+      void guardedAction(() => setDocFromPath(path));
+    };
+  }, [openRequestRef, guardedAction, setDocFromPath]);
+
+  // Ctrl+O: the dialog has already loaded the picked file; guard the swap.
+  const handleOpenedDocument = useCallback(
+    (opened: LoadedDocument) => {
+      void guardedAction(async () => {
+        setDoc(opened);
+      });
+    },
+    [guardedAction, setDoc],
+  );
+
+  // ---- Back / forward history (Alt+← / Alt+→, mouse side buttons,
+  // titlebar arrows). Every document that gets shown is recorded here,
+  // whichever path opened it; see lib/navHistory for the semantics.
+  const [history, setHistory] = useState(EMPTY_HISTORY);
+  const docPath = doc?.path ?? null;
+  useEffect(() => {
+    if (docPath) setHistory((h) => recordVisit(h, docPath));
+  }, [docPath]);
+  const back = backTarget(history, docPath);
+  const forward = forwardTarget(history, docPath);
+
+  const navigateTo = useCallback(
+    (target: NavTarget | null) => {
+      if (!target) return;
+      void guardedAction(async () => {
+        const loaded = await loadDocument(target.path);
+        if (!loaded) {
+          toast.show(`无法打开 ${basename(target.path)}`, { variant: 'error' });
+          return;
+        }
+        // Move the history cursor first, so the document swap below is
+        // recorded as a revisit, not a new branch.
+        setHistory((h) => moveTo(h, target));
+        setDoc(loaded);
+      });
+    },
+    [guardedAction, setDoc, toast],
+  );
+  const handleNavigateBack = useCallback(() => navigateTo(back), [navigateTo, back]);
+  const handleNavigateForward = useCallback(() => navigateTo(forward), [navigateTo, forward]);
+
+  // Mouse side buttons (XButton1 = back, XButton2 = forward), as in a
+  // browser. Suppress the webview's own handling of them on mousedown.
+  useEffect(() => {
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 3 || e.button === 4) e.preventDefault();
+    };
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button === 3) {
+        e.preventDefault();
+        handleNavigateBack();
+      } else if (e.button === 4) {
+        e.preventDefault();
+        handleNavigateForward();
+      }
+    };
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [handleNavigateBack, handleNavigateForward]);
 
   // v1.0 PR-A wraps Ctrl+W with the dirty guard. The unwrapped close
   // is still the underlying action (drop the doc → EmptyState).
@@ -442,7 +543,7 @@ function AppBody(props: AppBodyProps) {
 
   // Wire the global keyboard shortcuts.
   useShortcuts({
-    onOpenDocument: setDoc,
+    onOpenDocument: handleOpenedDocument,
     onOpenSearch: handleOpenSearch,
     onToggleToc: handleToggleToc,
     onCloseDocument: handleGuardedCloseDocument,
@@ -451,6 +552,8 @@ function AppBody(props: AppBodyProps) {
     onSaveDocument: handleSaveDocument,
     onSaveAsDocument: handleSaveAsDocument,
     onNewDocument: handleNewDocument,
+    onNavigateBack: handleNavigateBack,
+    onNavigateForward: handleNavigateForward,
   });
 
   // v1.0 PR-A: file watcher with conflict handling. The hook itself
@@ -545,7 +648,14 @@ function AppBody(props: AppBodyProps) {
 
   return (
     <div className="app-root">
-      <Titlebar docPath={doc?.path ?? null} hasDocument={doc !== null} />
+      <Titlebar
+        docPath={doc?.path ?? null}
+        hasDocument={doc !== null}
+        canGoBack={back !== null}
+        canGoForward={forward !== null}
+        onNavigateBack={handleNavigateBack}
+        onNavigateForward={handleNavigateForward}
+      />
       <LightboxProvider>
         <main className="app-main">
           <ErrorBoundary

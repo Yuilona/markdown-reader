@@ -30,6 +30,12 @@ interface TitlebarProps {
   /** Whether a document (saved or an unnamed Ctrl+N buffer) is open.
    *  The edit toggle is hidden without one — there's nothing to edit. */
   hasDocument?: boolean;
+  /** Document history (App.tsx / lib/navHistory). The arrows appear once
+   *  there is anywhere to go; a direction with nowhere to go is disabled. */
+  canGoBack?: boolean;
+  canGoForward?: boolean;
+  onNavigateBack?: () => void;
+  onNavigateForward?: () => void;
 }
 
 /**
@@ -45,7 +51,14 @@ interface TitlebarProps {
  *     so the user has a constant visual signal that there are
  *     unsaved changes.
  */
-export function Titlebar({ docPath, hasDocument = false }: TitlebarProps = {}) {
+export function Titlebar({
+  docPath,
+  hasDocument = false,
+  canGoBack = false,
+  canGoForward = false,
+  onNavigateBack,
+  onNavigateForward,
+}: TitlebarProps = {}) {
   const { mode, setMode } = useTheme();
   const { mode: editMode, toggleMode, dirty } = useEditMode();
   const { zoom, zoomIn, zoomOut, resetZoom } = usePageZoom();
@@ -107,6 +120,30 @@ export function Titlebar({ docPath, hasDocument = false }: TitlebarProps = {}) {
       <div className={styles.title} data-tauri-drag-region>
         {titleText}
       </div>
+      {(canGoBack || canGoForward) && (
+        <div className={styles.navGroup}>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.navBtn}`}
+            onClick={onNavigateBack}
+            disabled={!canGoBack}
+            aria-label="后退"
+            title="后退 (Alt+←)"
+          >
+            <ChevronIcon direction="left" />
+          </button>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.navBtn}`}
+            onClick={onNavigateForward}
+            disabled={!canGoForward}
+            aria-label="前进"
+            title="前进 (Alt+→)"
+          >
+            <ChevronIcon direction="right" />
+          </button>
+        </div>
+      )}
       <div className={styles.controls}>
         {/* Page-zoom controls — read mode only (R10.5). Scales the whole
          *  page via body zoom; handy on wide displays where the body text
@@ -261,6 +298,21 @@ function RestoreIcon() {
 }
 
 /** Magnifier glyph with a minus (zoom out) or plus (zoom in) inside. */
+function ChevronIcon({ direction }: { direction: 'left' | 'right' }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d={direction === 'left' ? 'M10 3.5 5.5 8 10 12.5' : 'M6 3.5 10.5 8 6 12.5'}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function ZoomIcon({ kind }: { kind: 'in' | 'out' }) {
   return (
     <svg width="19" height="19" viewBox="0 0 16 16" aria-hidden="true">

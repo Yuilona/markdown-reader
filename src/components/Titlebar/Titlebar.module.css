@@ -111,6 +111,29 @@
   outline-offset: -2px;
 }
 
+/* Back / forward arrows, pinned to the LEFT edge (the bar is flex-end, so
+ * margin-right:auto pushes them across). Positioned + z-index for the same
+ * reason as .controls: lift them above the absolutely-positioned .title so
+ * clicks land. The 2×40px fit inside .title's symmetric padding, so the
+ * centered filename is unaffected. */
+.navGroup {
+  display: flex;
+  align-items: stretch;
+  margin-right: auto;
+  position: relative;
+  z-index: 1;
+}
+
+.navBtn {
+  width: 40px;
+}
+
+.navBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: transparent;
+}
+
 /* v1.0: page-zoom controls (read mode). A − / percent / + cluster. The
  * percent doubles as a "reset to 100%" button. Narrow buttons so the
  * trio sits compactly before the secondary affordances. */

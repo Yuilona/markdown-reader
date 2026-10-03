@@ -51,6 +51,9 @@ interface UseShortcutsOptions {
   /** v1.0 PR-B (R-EDIT-6.1): Ctrl+N handler. Creates an unnamed buffer
    *  and enters edit mode. */
   onNewDocument?: () => void;
+  /** Alt+← / Alt+→: back / forward through opened documents. */
+  onNavigateBack?: () => void;
+  onNavigateForward?: () => void;
 }
 
 /** Test whether a KeyboardEvent originated inside CodeMirror 6's editor
@@ -147,6 +150,8 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
     onSaveDocument,
     onSaveAsDocument,
     onNewDocument,
+    onNavigateBack,
+    onNavigateForward,
   } = options;
   const { mode, setMode } = useTheme();
   const { zoomIn, zoomOut, resetZoom } = usePageZoom();
@@ -299,6 +304,20 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
         resetZoom();
         return;
       }
+      // Alt+← / Alt+→: document history, like a browser. Inside the editor
+      // CM6 owns these (Alt+← moves the cursor by syntax unit), so yield.
+      if (
+        e.altKey &&
+        !mod(e) &&
+        !e.shiftKey &&
+        (e.key === 'ArrowLeft' || e.key === 'ArrowRight') &&
+        !isInCodeMirror(e.target)
+      ) {
+        e.preventDefault();
+        if (e.key === 'ArrowLeft') onNavigateBack?.();
+        else onNavigateForward?.();
+        return;
+      }
       // F11 toggles window fullscreen (R13, PR-9). Bare F11 — no
       // modifiers. Errors are caught + logged; transient toggle failure
       // shouldn't pop a toast.
@@ -324,6 +343,8 @@ export function useShortcuts(options: UseShortcutsOptions = {}): void {
     onSaveDocument,
     onSaveAsDocument,
     onNewDocument,
+    onNavigateBack,
+    onNavigateForward,
     mode,
     setMode,
     zoomIn,
