@@ -1,8 +1,9 @@
 name: check
 
-# Lightweight gate on every push to main + all PRs: typecheck, unit tests,
-# and the frontend production build. Deliberately does NOT build the Tauri
-# app (that's slow + Windows-only) — see release.yml for the full bundle.
+# Gate on every push to main + all PRs: typecheck, unit tests, and the
+# frontend production build (job `check`), plus the Rust unit tests (job
+# `rust`, in parallel). Deliberately does NOT bundle the Tauri app (slow) —
+# see release.yml for the full per-platform bundles.
 on:
   push:
     branches: [main]
@@ -34,3 +35,42 @@ jobs:
 
       - name: Frontend build
         run: pnpm build
+
+  # Rust unit tests (src-tauri: text_codec encoding detection + atomic write,
+  # …), in parallel with the frontend job above. Compiling the Tauri crate
+  # needs the WebKitGTK dev libraries (same set as release.yml), and its
+  # generate_context! embeds `dist/` at compile time, so the frontend is
+  # built first.
+  rust:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Frontend build (embedded by the Tauri crate)
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test --locked
