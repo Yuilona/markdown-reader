@@ -67,6 +67,9 @@ pnpm tauri build         # 本地打 release 包
   user.css 会按 `.theme-seeded` 里的指纹自动升级；用户改过的永不覆盖。
 - **编码**：读写文档走 `read_document` / `write_document`，保持原编码与 BOM；
   无法用原编码表示时回退 UTF-8 并提示。
+- **图标**：源文件是 `src-tauri/icons/app-icon.svg`（启动页也直接引用它）。改完运行
+  `pnpm tauri icon src-tauri/icons/app-icon.svg -o <临时目录>`，把 32x32 / 64x64 / 128x128 /
+  128x128@2x / icon.png / icon.ico / icon.icns 拷回 `src-tauri/icons/`（其余平台文件不需要）。
 - **代码风格**：代码和注释用英文，面向用户的界面文字用中文；注释偏多，解释"为什么"。
 
 ## 注意事项

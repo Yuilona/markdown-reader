@@ -86,7 +86,6 @@
   --btn-bg: #ffffff;
   --btn-bg-hover: #f5f4ed;
   --btn-bg-active: #e8e6dc;
-  --logo-bg: #d97757;
 
   /* Claude-specific content colors used by the element rules below. */
   --claude-code-fg: #8a2424;     /* inline code text */
@@ -168,7 +167,6 @@
   --btn-bg: #30302e;
   --btn-bg-hover: #3a3a37;
   --btn-bg-active: #1f1e1d;
-  --logo-bg: #d97757;
 
   --claude-code-fg: #f4a9a9;
   --claude-quote-fg: #c2c0b6;

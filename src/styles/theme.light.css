@@ -91,7 +91,6 @@
   --btn-bg-active: var(--bg-active);
 
   /* ---- Logo block in EmptyState. ---- */
-  --logo-bg: #2d2d2d;
 
   /* ---- Generic text aliases the old CSS referenced (text, text-muted). ---- */
   --text: var(--fg-default);

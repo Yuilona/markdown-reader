@@ -69,7 +69,7 @@
 | `--bg-codeblock-toolbar` / `--bg-codeblock-toolbar-hover` / `--fg-codeblock-lang` | 代码块工具栏（语言标签 / 复制按钮） |
 | `--bg-frontmatter` / `--bg-frontmatter-body` | YAML frontmatter 卡片 |
 | `--bg-mermaid-container` / `--bg-mermaid-toolbar` | Mermaid 容器 / 工具栏 |
-| `--btn-bg` / `--btn-bg-hover` / `--btn-bg-active` / `--logo-bg` | 空状态按钮 / Logo |
+| `--btn-bg` / `--btn-bg-hover` / `--btn-bg-active` | 空状态按钮 |
 
 完整列表见 `src/styles/theme.light.css`（每个都有注释）。
 

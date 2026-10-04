@@ -1,5 +1,6 @@
 import { openFileDialog, type LoadedDocument } from '../../lib/tauri';
 import { RecentList } from './RecentList';
+import appIcon from '../../../src-tauri/icons/app-icon.svg';
 import styles from './EmptyState.module.css';
 
 interface EmptyStateProps {
@@ -30,7 +31,7 @@ export function EmptyState({ onOpen, onPickRecent, onNew, isDragOver }: EmptySta
   return (
     <div className={`${styles.container} ${isDragOver ? styles.dragOver : ''}`}>
       <div className={styles.content}>
-        <div className={styles.logo}>M</div>
+        <img className={styles.logo} src={appIcon} alt="" draggable={false} />
         <p className={styles.hint}>拖拽 .md 文件到此处</p>
         <p className={styles.hintSub}>或</p>
         <div className={styles.actions}>

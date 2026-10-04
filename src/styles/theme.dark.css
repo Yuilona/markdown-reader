@@ -83,7 +83,6 @@
   --btn-bg-active: #161b22;
 
   /* ---- Logo block in EmptyState. ---- */
-  --logo-bg: #2f81f7;
 
   /* ---- Generic text aliases the old CSS referenced (text, text-muted). ---- */
   --text: var(--fg-default);
